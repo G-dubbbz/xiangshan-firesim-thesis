@@ -1,0 +1,50 @@
+# OS/editor files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Python / Conda
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.env
+
+# Build products and generated hardware
+build/
+out/
+target/
+obj_dir/
+generated-src/
+generated/
+*.vcd
+*.fst
+*.vpd
+*.fsdb
+
+# FPGA / Vivado artifacts
+*.bit
+*.bin
+*.xclbin
+*.jou
+*.log
+*.rpt
+.vivado/
+vivado*
+
+# FireSim / simulation output
+sim-output/
+results/raw/
+checkpoints/
+waveforms/
+logs/
+*.trace
+*.tar
+*.tar.gz
+*.zip
+
+# Benchmark/workload data
+workloads/
+images/
+disk-images/
