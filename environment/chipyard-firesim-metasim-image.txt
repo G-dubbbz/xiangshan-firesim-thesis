@@ -1,0 +1,5 @@
+ID=sha256:9d537f45fe0aa25333dcb7bb7596aa7c207f8c054fc7936db86549caba8d3d86
+Created=2026-08-25T10:15:15.41269722+02:00
+Architecture=amd64
+Os=linux
+RepoTags=["chipyard-firesim-metasim:latest","ghcr.io/g-dubbbz/chipyard-firesim-metasim:0acc1e1-amd64"]

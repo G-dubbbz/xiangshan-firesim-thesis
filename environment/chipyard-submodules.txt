@@ -1,0 +1,137 @@
+ 17bd8d286297468a0256b15f908be08396cf804e fpga/fpga-shells (remotes/origin/clusters-11-g17bd8d2)
+ 96daf15d3c54ac4975ea2bdc869f95bccdf90a1e generators/ara (remotes/origin/modular)
+ df5b8d4cd4a335e8531a4db8b78c829fb7fb4030 generators/ara/ara (v3.0-191-gdf5b8d4c)
+-2e4ecbb3f0d574d18eddb97eff9421db45fb0da7 generators/ara/ara/toolchain/newlib
+-5842fde8ee5bb3371643b60ed34906eff7a5fa31 generators/ara/ara/toolchain/riscv-gnu-toolchain
+-5cf439b24e945db47edf6e259044c923384ccdfd generators/ara/ara/toolchain/riscv-isa-sim
+-5047104a76445bb424e480594f0eb2ed768315b3 generators/ara/ara/toolchain/riscv-llvm
+-7d2d32420a630befa4097170ecbf227e04e32522 generators/ara/ara/toolchain/verilator
+ bd02692fe6cb5197df90dc39051d31369ef61fcd generators/bar-fetchers (heads/master)
+ 5223e44cfeb26f41380057a2eb4d651197475f69 generators/boom (v3.0.0-411-g5223e44c)
+ 642dbdf07b59c96059142e3e9b9d4ad89097a5a6 generators/caliptra-aes-acc (heads/main)
+ bf5123307d7b5bc932dc9192355d28ae30b27835 generators/compress-acc (heads/main)
+-609d783118ca6026aa0d1bab7e485a62b6c7e4f0 generators/compress-acc/lzbench
+-6a2b78a379e4a6ca11eaacb3e26bea397a46d74b generators/compress-acc/software-snappy/snappy
+-32f72601cc4a1bd747b402e3f66e3efe0e410b81 generators/compress-acc/software/benchmarks/HyperCompressBench
+-e47e674cd09583ff0503f0f6defd6d23d8b718d3 generators/compress-acc/software/zstd
+ c1b42cd0c7c7d6e4fc1ed9bf1f86fbd3b31ac510 generators/constellation (heads/master)
+-2cc477880bd99a40f257155a676fc61fd53e0d9e generators/constellation/espresso
+ bf30293e05da0ff7057be209deb7dc0317f08b09 generators/constellation/src/main/resources/csrc/netrace (original-3-gbf30293)
+ 187ed3cd126c68659f446c963599525c2bf58420 generators/cva6 (remotes/origin/modular)
+-6000e32b4181304901adc4c8d72870ebc94473a5 generators/cva6/src/main/resources/cva6/vsrc/cva6
+ fe5e131d4fc8adec14a3ce4a4935bb5c0a269871 generators/diplomacy (heads/master)
+ e361f229b5574931f555b10e1b48f2769c07832c generators/fft-generator (heads/main)
+ 8c3f9923a44a2fe2c7930587be297d6d4f8c09ca generators/gemmini (v0.1a-515-g8c3f992)
+ 7c540b3adf1b86ad93d07f893abe3a73489b568e generators/gemmini/software/gemmini-rocc-tests (heads/dev)
+ c84daca8824635b7d896003c78f9c6245997cf7a generators/gemmini/software/gemmini-rocc-tests/riscv-tests (remotes/origin/hw_watchpoint-206-gc84daca)
+ 0666378f353599d01fc48562b431b1dd049faab5 generators/gemmini/software/gemmini-rocc-tests/riscv-tests/env (remotes/origin/priv-1.10-32-g0666378)
+ fddb795a0b52e82f8f4ce9ead9b1428440a62ab0 generators/gemmini/software/gemmini-rocc-tests/rocc-software (remotes/origin/pr-5-review-3-gfddb795)
+ ea8f7ed7afd68e001fb06ddccad9a023c990961d generators/gemmini/software/libgemmini (remotes/origin/spike-bump)
+-f6d2fc95463316ec47d7f832f35be03c26887922 generators/gemmini/software/onnxruntime-riscv
+ 0ecaef097ce2accbd16a61613699450ed5533f29 generators/hardfloat (remotes/origin/fix-ci-4-g0ecaef0)
+ 5c06db33fc1e2130f67c045327b0ec949032df1d generators/hardfloat/berkeley-softfloat-3 (5c06db3)
+ 06b20075dd3c1a5d0dd007a93643282832221612 generators/hardfloat/berkeley-testfloat-3 (06b2007)
+ 5129576841529ee5581e038e0678de972baf1e76 generators/ibex (remotes/origin/modular)
+ 48f11c673348908c37d3eaa9bd1cd0a5b5c69253 generators/ibex/src/main/resources/vsrc/ibex (pulpissimo-v1.0.1-1263-g48f11c67)
+ 61d2925b9d57df189ab8d801eb81185040251249 generators/icenet (heads/master)
+ de90faa3b4e01f4ca76c592367c5c19b774ac8e8 generators/mempress (heads/main)
+ d99ffdc79bbf9b86c6cad0c278a785d5802c8209 generators/nvdla (heads/master)
+ 8e06b1b9d85aab65b40d43d08eec5ea4681ff715 generators/nvdla/src/main/resources/hw (heads/nvdlav1)
+ 917c95cdb6d698c4fd267ccab2602e283d2ca6c3 generators/radiance (old-cisc-127-g917c95c)
+ ca6933c4ec0ba1d9d7ec5452d325a8cdd8c2120d generators/radiance/cyclotron (ca6933c)
+ f1d0fac51869eb10b218fead7607459f96ec99b6 generators/radiance/src/main/resources/vsrc/vortex (ae-tarball)
+ 25a0d6763ffe83e1c8701bef5758996c484c1f58 generators/radiance/src/main/resources/vsrc/vortex/third_party/fpnew (25a0d67)
+ 28be2d4fbf41b38fc37763bb6e90a1c88f6aaa61 generators/radiance/src/main/resources/vsrc/vortex/third_party/fpnew/tb/flexfloat (28be2d4)
+ 214f635845214adf030367939655d172ef0fed5f generators/radiance/src/main/resources/vsrc/vortex/third_party/ramulator (v.0)
+ eb498c55bab0f49c3903f69524e2674abe71c26b generators/radiance/src/main/resources/vsrc/vortex/third_party/softfloat (eb498c5)
+ 8b672f4e836c111d09e135e8981b611d120692de generators/rerocc (heads/master)
+ 910a2e83ce206e86372927ec3e0b8056953f7d95 generators/riscv-sodor (remotes/origin/modular)
+ 33ea77110ca9c28c5c7eb3c6b67ae74096ea8b37 generators/rocc-acc-utils (heads/main)
+ 55bcad0f59436de98ea510334121de8546b9e9d7 generators/rocket-chip (v1.6-819-g55bcad0f)
+-52768c97a27b254c0cc0ac9401feb55b29e18c28 generators/rocket-chip/dependencies/cde
+-e3bcc90db37f1aec9f8048813f4f0666098d9bee generators/rocket-chip/dependencies/chisel
+-fe5e131d4fc8adec14a3ce4a4935bb5c0a269871 generators/rocket-chip/dependencies/diplomacy
+-d93aa570806013dea479a92ba9bb33d1f2d4f69f generators/rocket-chip/dependencies/hardfloat
+ f8c7fddbd7639b15fefc968af59fcc4a8f7df73b generators/rocket-chip-blocks (heads/main)
+ 85420cf26f9abcebf685f0d68d14189598943c19 generators/rocket-chip-inclusive-cache (remotes/origin/rc-bump-6-g85420cf)
+ dfe75de2a8868d51d42c20612821431a9fcf645e generators/saturn (remotes/origin/fix-vmu-5-gdfe75de)
+ 1c577dc7c7d6aee27b8d5cb0e2e87c8473e3ad12 generators/saturn/benchmarks/env (remotes/origin/priv-1.10-39-g1c577dc)
+ 20200cc00c33729b442335d84db8af3166d211fd generators/saturn/riscv-vector-tests (20200cc)
+ 1c577dc7c7d6aee27b8d5cb0e2e87c8473e3ad12 generators/saturn/riscv-vector-tests/env/riscv-test-env (remotes/origin/priv-1.10-39-g1c577dc)
+ 622f08b9fd3697e3fd75e7799885ecdf9e2f13f2 generators/shuttle (1.2-42-g622f08b)
+ fe61365292ef1fa60410a2a91c48a3e3d22b1a75 generators/tacit (remotes/origin/modular)
+ 26f821be94252b9c4c83511a3376a51ffc138551 generators/testchipip (remotes/origin/spike-bump-21-g26f821b)
+ c82fcfcd5cad4a416987ed12aef75b45a7892b5c generators/vexiiriscv (remotes/origin/modular)
+ b9f015acde910a75612e6598f56567fb549e4604 generators/vexiiriscv/VexiiRiscv (v0.0.0-771-gb9f015a)
+-3c613a25f7f6450ad1f7763c173c45b4a97ddf21 generators/vexiiriscv/VexiiRiscv/ext/NaxSoftware
+ fc89224e30e9122905da5b706fd5d1ee02332489 generators/vexiiriscv/VexiiRiscv/ext/SpinalHDL (v1.7.0-2643-gfc89224e3)
+-a98830423924fc89bfebae84cb802fc90d352602 generators/vexiiriscv/VexiiRiscv/ext/SpinalHDL/tester/src/test/python/cocotblib
+-5f4eca2c0a5ee7808ad235f5230f3bd2c14a6ffa generators/vexiiriscv/VexiiRiscv/ext/riscv-isa-sim
+ 2c8665ea418a6829686417615efeeb79023a5cf5 generators/vexiiriscv/VexiiRiscv/ext/rvls (2c8665e)
+ da2a1cbcebbb96e21c551ebef513fd95a9d73403 sims/firesim (1.21.0)
+ 53223d71ce20f02925c74b81da3e6ff0deb79fe2 sims/firesim/platforms/f1/aws-fpga (1.12.0-115-g53223d7)
+ 0ec1aef54f3bf17c78581630d687b13fadae9616 sims/firesim/platforms/f1/aws-fpga/SDAccel/examples/xilinx_2019.1 (2016.4-983-g0ec1aef5)
+ bb80c8ec699c3131e8874735bd99475ac6fe2ec7 sims/firesim/platforms/f1/aws-fpga/Vitis/examples/xilinx_2019.2 (2020.1_rel~95^2~1)
+ 6dc5174366f13e541af446213db0c98f401ba1e6 sims/firesim/platforms/f1/aws-fpga/Vitis/examples/xilinx_2020.1 (2020.1_rel-50-g6dc517436)
+ f72dff9eea45a76e9ee0713774589624e2b52c9f sims/firesim/platforms/f1/aws-fpga/Vitis/examples/xilinx_2020.2 (2020.1_update1)
+ f640bc8db1a9ffa8b09ae7b47ecca8b706132f75 sims/firesim/platforms/f1/aws-fpga/Vitis/examples/xilinx_2021.1 (2020.2_update1-227-gf640bc8db)
+ f61637e9263ecc1be3df34182ea6c53a0ca10447 sims/firesim/platforms/f1/aws-fpga/Vitis/examples/xilinx_2021.2 (2021.1_rel2-120-gf61637e92)
+ 80b34d3c25aff03353c0b4f2d304bb6067a5011d sims/firesim/platforms/f2/aws-fpga-firesim-f2 (remotes/origin/bump-upstream)
+ 6d32be972e6da854e61a8d3d6ec0466ab491c1b3 sims/firesim/platforms/f2/aws-fpga-firesim-f2/hdk/common/ip (heads/Vivado_2025.2-hdk/common/ip)
+ 2383c2b64572c75163b1b60fbd0abea482c637e6 sims/firesim/platforms/f2/aws-fpga-firesim-f2/hdk/common/shell_stable/hlx (remotes/origin/Hlx_1.0-hdk/common/shell_stable/hlx)
+ dfed09d33196ba4c96bca0ca2b078ce1bdb16c8c sims/firesim/platforms/rhsresearch_nitefury_ii/NiteFury-and-LiteFury-firesim (heads/master)
+ e0bb020ac0ff6c3731cb82cfc9789963a0e1c382 sims/firesim/platforms/xilinx_vcu118/garnet-firesim (heads/main)
+ 26f00d00c3f3f57480065e02bfcfde3d3b41ec51 sims/firesim/sim/berkeley-hardfloat (remotes/origin/naming-1-g26f00d0)
+ 5c06db33fc1e2130f67c045327b0ec949032df1d sims/firesim/sim/berkeley-hardfloat/berkeley-softfloat-3 (5c06db3)
+ 06b20075dd3c1a5d0dd007a93643282832221612 sims/firesim/sim/berkeley-hardfloat/berkeley-testfloat-3 (06b2007)
+ 2bcaeae2b9914bd25497ce3c6fa62dc5ca80e09f sims/firesim/sim/cde (0.1.2-9-g2bcaeae)
+ a042ff6df083624ceba471367d4292c91b43f7e6 sims/firesim/sim/diplomacy (remotes/origin/naming-1-ga042ff6)
+ 1b9f43352c7fd6e4e81cb244b422f6c605ffd3df sims/firesim/sim/rocket-chip (v1.6-703-g1b9f43352)
+ 52768c97a27b254c0cc0ac9401feb55b29e18c28 sims/firesim/sim/rocket-chip/dependencies/cde (0.1.2-8-g52768c9)
+ e3bcc90db37f1aec9f8048813f4f0666098d9bee sims/firesim/sim/rocket-chip/dependencies/chisel (2019-03-11-SNAPSHOT-4441-ge3bcc90db3)
+ edf375300d99a4c260a214d7c1553de0040771d7 sims/firesim/sim/rocket-chip/dependencies/diplomacy (remotes/origin/diplomacy-review-4-gedf3753)
+ d93aa570806013dea479a92ba9bb33d1f2d4f69f sims/firesim/sim/rocket-chip/dependencies/hardfloat (remotes/origin/dev-16-gd93aa57)
+ 5c06db33fc1e2130f67c045327b0ec949032df1d sims/firesim/sim/rocket-chip/dependencies/hardfloat/berkeley-softfloat-3 (5c06db3)
+ 06b20075dd3c1a5d0dd007a93643282832221612 sims/firesim/sim/rocket-chip/dependencies/hardfloat/berkeley-testfloat-3 (06b2007)
+ 6e01715bea3e4a4015138e9583e40caa08205408 software/baremetal-ide (v1.0.0-208-g6e01715)
+-cf8b8f7d82e085b3ecb31865fa40fb3dd62554f2 software/coremark
+ d9b30cdf805133bef9db5f7ecf84ae1ce8124291 software/embench/embench-iot (embench-0.5-48-gd9b30cd)
+ 21119e5ce922ff9302f0bc9d2d7349c77f7ac064 software/firemarshal (v1.12.0-274-g21119e5)
+-2555f47788964d796c8a49e81ce1f5d63b9cb9ac software/firemarshal/boards/default/distros/br/buildroot
+-5ccebf0a7ec79d0bbef36d6dcdc2717f25d40767 software/firemarshal/boards/default/firmware/opensbi
+-67bc4513761f09952a5d5f5c899630ed91ce6442 software/firemarshal/boards/default/linux
+-e2b1d25aef89601d52a70784401796a1d2845721 software/firemarshal/boards/firechip/drivers/iceblk-driver
+-72022daf314ad45391e3b6398418c072091b51d1 software/firemarshal/boards/firechip/drivers/icenet-driver
+-70f77e4617e06077231b8b63c3fb3406d7f8865d software/firemarshal/wlutil/busybox
+ 172265a3c74fc6dcd492cb3753ee21a319cffdcc software/firesim-paper-workloads (172265a)
+ a5b884a71287a7be509f8388342eb32b2de36a2a software/firesim-paper-workloads/ccbench-cache-sweep/ccbench (remotes/origin/firesim-linux)
+ 83559affed6b900ec49a6d88c7fe6d36ba40edce software/firesim-paper-workloads/memcached-thread-imbalance/mutilate-loadgen-riscv-release (heads/master)
+ b974ce4bc1054756facb2ef7e7d95161c9f8bb08 software/firesim-paper-workloads/memcached-thread-imbalance/mutilate-loadgen-riscv-release/mutilate (heads/firesim)
+ 356d978ff9af407c8a199f8bedbe608effaee356 software/firesim-paper-workloads/network-benchmarks (heads/master)
+ 116c480d06cf1bd239c276f14ea3e24a466e06e1 software/firesim-paper-workloads/runscripts/gapbs-scripts/gapbs (v1.2-1-g116c480)
+-30290c3ed8014577fa2ad234fa1b731a082299fb software/nvdla-workload
+-83e33110472c47aaa762257ed7c053ff1278834c software/spec2017
+ acbbd2e2e5344548a464460bff9ee9b9ff437209 software/tacit_decoder (acbbd2e)
+-cd45a528d3bf81f9c7aa2a63f9fe512eee0881b0 software/zephyrproject/zephyr
+ 39234a16247ab1fa234821b251f1f1870c3de343 toolchains/libgloss (heads/master)
+ 9c190a07c6838f6392bafa4ad83acea462c7f759 toolchains/riscv-tools/riscv-isa-sim (dummy-tag-for-ci-storage-1472-g9c190a07)
+-8f59570468edcf53854d2fd6dabf57b8db7d23c9 toolchains/riscv-tools/riscv-openocd
+ abadfdc507d5a75b6272dc360e70a80a510c758a toolchains/riscv-tools/riscv-pk (v1.0.0-129-gabadfdc)
+ 887b868db313805c7163f7cc519a7b9e74d92c98 toolchains/riscv-tools/riscv-spike-devices (remotes/origin/spike-bump)
+ 0494f954a3d8d2ca9e4972da7a01e94b6a909bce toolchains/riscv-tools/riscv-tests (remotes/origin/hw_watchpoint-376-g0494f95)
+ 4fabfb4e0d3eacc1dc791da70e342e4b68ea7e46 toolchains/riscv-tools/riscv-tests/env (remotes/origin/priv-1.10-38-g4fabfb4)
+-56c29e01ba3e705c563edd1271a387119bddb5a5 toolchains/riscv-tools/riscv-tools-feedstock
+ 44322e2f935d7dac83b7adf8dd270b41a54c6acb tools/DRAMSim2 (v2.2.2-19-g44322e2)
+ 4a7cf86960425fbf0b6224865b745ff511dc5742 tools/axe (heads/master)
+ 2bcaeae2b9914bd25497ce3c6fa62dc5ca80e09f tools/cde (0.1.2-9-g2bcaeae)
+-481cb60add7358934414a3c6b396f5d29ad934fe tools/circt
+ a310a157cab6e569d30741eae4ca5592069cab7c tools/dsptools (2019-03-11-SNAPSHOT-149-ga310a15)
+-ef164009e40ce5a5abe61ebcc11c12ff82e34014 tools/dsptools/fixedpoint
+ 09156cae09cb37c530322c6005649d2380c3eb0e tools/firrtl2 (2019-03-11-SNAPSHOT-961-g09156cae)
+ ef164009e40ce5a5abe61ebcc11c12ff82e34014 tools/fixedpoint (remotes/origin/chisel5.1.0)
+ 3f8dda6e1c1965537b5801a43c81c287bac4eae4 tools/install-circt (v1.1.1)
+ 6ee2309f80a54b404795f227793d2a54e1dfadf8 tools/rocket-dsp-utils (2019-03-11-SNAPSHOT-171-g6ee2309)
+-8f4336639578d2e2dbaf61e542ee1f0fa8d79e63 tools/rocket-dsp-utils/tools/dsptools
+-281e5c8f2e1cca68439fe04799d7be855db92517 tools/rocket-dsp-utils/tools/rocket-chip
+ b2b66a66d51b360e0ae95017774d03377c78c574 tools/torture (remotes/origin/add_loops-12-gb2b66a6)
+ 1b76fd1f1c63dfe4cea93f426434a7384d2bf801 tools/torture/env (remotes/origin/priv-1.10-2-g1b76fd1)
