@@ -20,9 +20,17 @@ RUN apt-get update && \
         git \
         keyboard-configuration \
         sudo \
+        time \
         unzip \
         wget && \
     rm -rf /var/lib/apt/lists/*
+
+# Mill bootstrap launcher. XiangShan pins its required Mill version in
+# /work/XiangShan/.mill-version; the launcher reads that file at runtime.
+RUN curl -fsSL \
+    https://repo1.maven.org/maven2/com/lihaoyi/mill-dist/1.1.8/mill-dist-1.1.8-mill.sh \
+    -o /usr/local/bin/mill && \
+    chmod +x /usr/local/bin/mill
 
 WORKDIR /opt
 
@@ -62,6 +70,15 @@ RUN cd "${CHIPYARD_DIST}" && \
     export MAKEFLAGS="-j $(nproc)" && \
     conda activate base && \
     ./build-setup.sh --conda-env-name chipyard --skip-toolchain --skip-ctags --skip-precompile --skip-firesim --skip-marshal --skip-circt --skip-clean
+
+# Pre-fetch XiangShan's pinned Mill version after Java is available in
+# the Chipyard Conda environment.
+RUN source /opt/conda/etc/profile.d/conda.sh && \
+    conda activate chipyard && \
+    mkdir -p /tmp/mill-warmup && \
+    printf '0.12.17\n' > /tmp/mill-warmup/.mill-version && \
+    cd /tmp/mill-warmup && \
+    mill --version
 
 # Build RISC-V toolchain collateral under /opt/conda/envs/chipyard.
 RUN cd "${CHIPYARD_DIST}" && \
