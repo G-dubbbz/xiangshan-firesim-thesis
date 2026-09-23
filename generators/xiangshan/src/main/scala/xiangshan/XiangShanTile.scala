@@ -9,9 +9,12 @@
 // analogue at all).
 //
 // STATUS: v0 draft, NOT YET COMPILED against the user's actual Chipyard/
-// rocket-chip checkout. `CoreParams` in particular is a trait whose exact
-// field list drifts across rocket-chip versions/forks — before this
-// compiles, diff the fields below against:
+// rocket-chip checkout. AXI4 field names/widths and cacheable_check/
+// trace/clock/reset naming are now CONFIRMED against a full port dump of
+// the actual IDUN-built XSTop.sv (2026-09-21) — see XSTopBlackBox.scala's
+// header. `CoreParams` is still the main open risk: it's a trait whose
+// exact field list drifts across rocket-chip versions/forks — before
+// this compiles, diff the fields below against:
 //   grep -n "trait CoreParams" -A 60 \
 //     generators/rocket-chip/src/main/scala/tile/Core.scala
 // and adjust. Treat the first `sbt compile` output on this file as the
@@ -220,9 +223,11 @@ class XiangShanTileModuleImp(outer: XiangShanTile) extends BaseTileModuleImp(out
 
   val core = Module(new XSTop)
 
-  // ---- Clock / reset [CONFIRMED wiring per baseline doc] ----
-  core.clock := clock
-  core.reset := reset.asAsyncReset
+  // ---- Clock / reset [CONFIRMED — XSTop's actual ports are io_clock/
+  // io_reset, NOT bare clock/reset; a Chisel BlackBox has no implicit
+  // clock/reset the way a Module does, so this must be explicit] ----
+  core.io_clock := clock
+  core.io_reset := reset.asAsyncReset
   // core.io_rtc_clock must be driven from a real RTC clock source, not
   // tied off — wire to whatever Chipyard's own RTC/timer clock domain is
   // (e.g. `outer.rtcClockNode` if one is added, or the system's existing
@@ -252,148 +257,163 @@ class XiangShanTileModuleImp(outer: XiangShanTile) extends BaseTileModuleImp(out
   core.io_riscv_halt_0           // unconnected output, expose via SourcesExternalNotifications if desired
   core.io_riscv_critical_error_0 // ditto
 
-  // ---- AXI4 field-by-field connections ----
+  // ---- AXI4 field-by-field connections [CONFIRMED field names —
+  // flat AXI-standard short names, no `bits_` hierarchy, no `io_`
+  // prefix — see XSTopBlackBox.scala / baseline doc for the full
+  // grep-verified port dump this is transcribed from] ----
+
   // memory_*
   outer.memAXI4Node.out.foreach { case (axi4, _) =>
-    core.io_memory.aw_valid          := axi4.aw.valid
-    axi4.aw.ready                    := core.io_memory.aw_ready
-    core.io_memory.aw_bits_id        := axi4.aw.bits.id
-    core.io_memory.aw_bits_addr      := axi4.aw.bits.addr
-    core.io_memory.aw_bits_len       := axi4.aw.bits.len
-    core.io_memory.aw_bits_size      := axi4.aw.bits.size
-    core.io_memory.aw_bits_burst     := axi4.aw.bits.burst
-    core.io_memory.aw_bits_lock      := axi4.aw.bits.lock
-    core.io_memory.aw_bits_cache     := axi4.aw.bits.cache
-    core.io_memory.aw_bits_prot      := axi4.aw.bits.prot
-    core.io_memory.aw_bits_qos       := axi4.aw.bits.qos
+    core.memory.awvalid   := axi4.aw.valid
+    axi4.aw.ready         := core.memory.awready
+    core.memory.awid      := axi4.aw.bits.id
+    core.memory.awaddr    := axi4.aw.bits.addr
+    core.memory.awlen     := axi4.aw.bits.len
+    core.memory.awsize    := axi4.aw.bits.size
+    core.memory.awburst   := axi4.aw.bits.burst
+    core.memory.awlock    := axi4.aw.bits.lock
+    core.memory.awcache   := axi4.aw.bits.cache
+    core.memory.awprot    := axi4.aw.bits.prot
+    core.memory.awqos     := axi4.aw.bits.qos
 
-    core.io_memory.w_valid           := axi4.w.valid
-    axi4.w.ready                     := core.io_memory.w_ready
-    core.io_memory.w_bits_data       := axi4.w.bits.data
-    core.io_memory.w_bits_strb       := axi4.w.bits.strb
-    core.io_memory.w_bits_last       := axi4.w.bits.last
+    core.memory.wvalid    := axi4.w.valid
+    axi4.w.ready          := core.memory.wready
+    core.memory.wdata     := axi4.w.bits.data
+    core.memory.wstrb     := axi4.w.bits.strb
+    core.memory.wlast     := axi4.w.bits.last
 
-    axi4.b.valid                     := core.io_memory.b_valid
-    core.io_memory.b_ready           := axi4.b.ready
-    axi4.b.bits.id                   := core.io_memory.b_bits_id
-    axi4.b.bits.resp                 := core.io_memory.b_bits_resp
+    axi4.b.valid          := core.memory.bvalid
+    core.memory.bready    := axi4.b.ready
+    axi4.b.bits.id        := core.memory.bid
+    axi4.b.bits.resp      := core.memory.bresp
 
-    core.io_memory.ar_valid          := axi4.ar.valid
-    axi4.ar.ready                    := core.io_memory.ar_ready
-    core.io_memory.ar_bits_id        := axi4.ar.bits.id
-    core.io_memory.ar_bits_addr      := axi4.ar.bits.addr
-    core.io_memory.ar_bits_len       := axi4.ar.bits.len
-    core.io_memory.ar_bits_size      := axi4.ar.bits.size
-    core.io_memory.ar_bits_burst     := axi4.ar.bits.burst
-    core.io_memory.ar_bits_lock      := axi4.ar.bits.lock
-    core.io_memory.ar_bits_cache     := axi4.ar.bits.cache
-    core.io_memory.ar_bits_prot      := axi4.ar.bits.prot
-    core.io_memory.ar_bits_qos       := axi4.ar.bits.qos
+    core.memory.arvalid   := axi4.ar.valid
+    axi4.ar.ready         := core.memory.arready
+    core.memory.arid      := axi4.ar.bits.id
+    core.memory.araddr    := axi4.ar.bits.addr
+    core.memory.arlen     := axi4.ar.bits.len
+    core.memory.arsize    := axi4.ar.bits.size
+    core.memory.arburst   := axi4.ar.bits.burst
+    core.memory.arlock    := axi4.ar.bits.lock
+    core.memory.arcache   := axi4.ar.bits.cache
+    core.memory.arprot    := axi4.ar.bits.prot
+    core.memory.arqos     := axi4.ar.bits.qos
 
-    axi4.r.valid                     := core.io_memory.r_valid
-    core.io_memory.r_ready           := axi4.r.ready
-    axi4.r.bits.id                   := core.io_memory.r_bits_id
-    axi4.r.bits.data                 := core.io_memory.r_bits_data
-    axi4.r.bits.resp                 := core.io_memory.r_bits_resp
-    axi4.r.bits.last                 := core.io_memory.r_bits_last
+    axi4.r.valid          := core.memory.rvalid
+    core.memory.rready    := axi4.r.ready
+    axi4.r.bits.id        := core.memory.rid
+    axi4.r.bits.data      := core.memory.rdata
+    axi4.r.bits.resp      := core.memory.rresp
+    axi4.r.bits.last      := core.memory.rlast
   }
 
   // peripheral_* — identical shape to memory_*, narrower widths.
   outer.periphAXI4Node.out.foreach { case (axi4, _) =>
-    core.io_peripheral.aw_valid      := axi4.aw.valid
-    axi4.aw.ready                    := core.io_peripheral.aw_ready
-    core.io_peripheral.aw_bits_id    := axi4.aw.bits.id
-    core.io_peripheral.aw_bits_addr  := axi4.aw.bits.addr
-    core.io_peripheral.aw_bits_len   := axi4.aw.bits.len
-    core.io_peripheral.aw_bits_size  := axi4.aw.bits.size
-    core.io_peripheral.aw_bits_burst := axi4.aw.bits.burst
-    core.io_peripheral.aw_bits_lock  := axi4.aw.bits.lock
-    core.io_peripheral.aw_bits_cache := axi4.aw.bits.cache
-    core.io_peripheral.aw_bits_prot  := axi4.aw.bits.prot
-    core.io_peripheral.aw_bits_qos   := axi4.aw.bits.qos
+    core.peripheral.awvalid := axi4.aw.valid
+    axi4.aw.ready            := core.peripheral.awready
+    core.peripheral.awid     := axi4.aw.bits.id
+    core.peripheral.awaddr   := axi4.aw.bits.addr
+    core.peripheral.awlen    := axi4.aw.bits.len
+    core.peripheral.awsize   := axi4.aw.bits.size
+    core.peripheral.awburst  := axi4.aw.bits.burst
+    core.peripheral.awlock   := axi4.aw.bits.lock
+    core.peripheral.awcache  := axi4.aw.bits.cache
+    core.peripheral.awprot   := axi4.aw.bits.prot
+    core.peripheral.awqos    := axi4.aw.bits.qos
 
-    core.io_peripheral.w_valid       := axi4.w.valid
-    axi4.w.ready                     := core.io_peripheral.w_ready
-    core.io_peripheral.w_bits_data   := axi4.w.bits.data
-    core.io_peripheral.w_bits_strb   := axi4.w.bits.strb
-    core.io_peripheral.w_bits_last   := axi4.w.bits.last
+    core.peripheral.wvalid   := axi4.w.valid
+    axi4.w.ready             := core.peripheral.wready
+    core.peripheral.wdata    := axi4.w.bits.data
+    core.peripheral.wstrb    := axi4.w.bits.strb
+    core.peripheral.wlast    := axi4.w.bits.last
 
-    axi4.b.valid                     := core.io_peripheral.b_valid
-    core.io_peripheral.b_ready       := axi4.b.ready
-    axi4.b.bits.id                   := core.io_peripheral.b_bits_id
-    axi4.b.bits.resp                 := core.io_peripheral.b_bits_resp
+    axi4.b.valid             := core.peripheral.bvalid
+    core.peripheral.bready   := axi4.b.ready
+    axi4.b.bits.id           := core.peripheral.bid
+    axi4.b.bits.resp         := core.peripheral.bresp
 
-    core.io_peripheral.ar_valid      := axi4.ar.valid
-    axi4.ar.ready                    := core.io_peripheral.ar_ready
-    core.io_peripheral.ar_bits_id    := axi4.ar.bits.id
-    core.io_peripheral.ar_bits_addr  := axi4.ar.bits.addr
-    core.io_peripheral.ar_bits_len   := axi4.ar.bits.len
-    core.io_peripheral.ar_bits_size  := axi4.ar.bits.size
-    core.io_peripheral.ar_bits_burst := axi4.ar.bits.burst
-    core.io_peripheral.ar_bits_lock  := axi4.ar.bits.lock
-    core.io_peripheral.ar_bits_cache := axi4.ar.bits.cache
-    core.io_peripheral.ar_bits_prot  := axi4.ar.bits.prot
-    core.io_peripheral.ar_bits_qos   := axi4.ar.bits.qos
+    core.peripheral.arvalid  := axi4.ar.valid
+    axi4.ar.ready            := core.peripheral.arready
+    core.peripheral.arid     := axi4.ar.bits.id
+    core.peripheral.araddr   := axi4.ar.bits.addr
+    core.peripheral.arlen    := axi4.ar.bits.len
+    core.peripheral.arsize   := axi4.ar.bits.size
+    core.peripheral.arburst  := axi4.ar.bits.burst
+    core.peripheral.arlock   := axi4.ar.bits.lock
+    core.peripheral.arcache  := axi4.ar.bits.cache
+    core.peripheral.arprot   := axi4.ar.bits.prot
+    core.peripheral.arqos    := axi4.ar.bits.qos
 
-    axi4.r.valid                     := core.io_peripheral.r_valid
-    core.io_peripheral.r_ready       := axi4.r.ready
-    axi4.r.bits.id                   := core.io_peripheral.r_bits_id
-    axi4.r.bits.data                 := core.io_peripheral.r_bits_data
-    axi4.r.bits.resp                 := core.io_peripheral.r_bits_resp
-    axi4.r.bits.last                 := core.io_peripheral.r_bits_last
+    axi4.r.valid             := core.peripheral.rvalid
+    core.peripheral.rready   := axi4.r.ready
+    axi4.r.bits.id           := core.peripheral.rid
+    axi4.r.bits.data         := core.peripheral.rdata
+    axi4.r.bits.resp         := core.peripheral.rresp
+    axi4.r.bits.last         := core.peripheral.rlast
   }
 
   // dma_* — XSTop is the slave; directions flip relative to the two
   // master ports above (core drives b/r, external side drives aw/w/ar).
   outer.dmaAXI4Node.in.foreach { case (axi4, _) =>
-    axi4.aw.valid                    := core.io_dma.aw_valid
-    core.io_dma.aw_ready             := axi4.aw.ready
-    axi4.aw.bits.id                  := core.io_dma.aw_bits_id
-    axi4.aw.bits.addr                := core.io_dma.aw_bits_addr
-    axi4.aw.bits.len                 := core.io_dma.aw_bits_len
-    axi4.aw.bits.size                := core.io_dma.aw_bits_size
-    axi4.aw.bits.burst               := core.io_dma.aw_bits_burst
-    axi4.aw.bits.lock                := core.io_dma.aw_bits_lock
-    axi4.aw.bits.cache               := core.io_dma.aw_bits_cache
-    axi4.aw.bits.prot                := core.io_dma.aw_bits_prot
-    axi4.aw.bits.qos                 := core.io_dma.aw_bits_qos
+    axi4.aw.valid          := core.dma.awvalid
+    core.dma.awready       := axi4.aw.ready
+    axi4.aw.bits.id        := core.dma.awid
+    axi4.aw.bits.addr      := core.dma.awaddr
+    axi4.aw.bits.len       := core.dma.awlen
+    axi4.aw.bits.size      := core.dma.awsize
+    axi4.aw.bits.burst     := core.dma.awburst
+    axi4.aw.bits.lock      := core.dma.awlock
+    axi4.aw.bits.cache     := core.dma.awcache
+    axi4.aw.bits.prot      := core.dma.awprot
+    axi4.aw.bits.qos       := core.dma.awqos
 
-    axi4.w.valid                     := core.io_dma.w_valid
-    core.io_dma.w_ready              := axi4.w.ready
-    axi4.w.bits.data                 := core.io_dma.w_bits_data
-    axi4.w.bits.strb                 := core.io_dma.w_bits_strb
-    axi4.w.bits.last                 := core.io_dma.w_bits_last
+    axi4.w.valid           := core.dma.wvalid
+    core.dma.wready        := axi4.w.ready
+    axi4.w.bits.data       := core.dma.wdata
+    axi4.w.bits.strb       := core.dma.wstrb
+    axi4.w.bits.last       := core.dma.wlast
 
-    core.io_dma.b_valid              := axi4.b.valid
-    axi4.b.ready                     := core.io_dma.b_ready
-    core.io_dma.b_bits_id            := axi4.b.bits.id
-    core.io_dma.b_bits_resp          := axi4.b.bits.resp
+    core.dma.bvalid        := axi4.b.valid
+    axi4.b.ready           := core.dma.bready
+    core.dma.bid           := axi4.b.bits.id
+    core.dma.bresp         := axi4.b.bits.resp
 
-    axi4.ar.valid                    := core.io_dma.ar_valid
-    core.io_dma.ar_ready             := axi4.ar.ready
-    axi4.ar.bits.id                  := core.io_dma.ar_bits_id
-    axi4.ar.bits.addr                := core.io_dma.ar_bits_addr
-    axi4.ar.bits.len                 := core.io_dma.ar_bits_len
-    axi4.ar.bits.size                := core.io_dma.ar_bits_size
-    axi4.ar.bits.burst               := core.io_dma.ar_bits_burst
-    axi4.ar.bits.lock                := core.io_dma.ar_bits_lock
-    axi4.ar.bits.cache               := core.io_dma.ar_bits_cache
-    axi4.ar.bits.prot                := core.io_dma.ar_bits_prot
-    axi4.ar.bits.qos                 := core.io_dma.ar_bits_qos
+    axi4.ar.valid          := core.dma.arvalid
+    core.dma.arready       := axi4.ar.ready
+    axi4.ar.bits.id        := core.dma.arid
+    axi4.ar.bits.addr      := core.dma.araddr
+    axi4.ar.bits.len       := core.dma.arlen
+    axi4.ar.bits.size      := core.dma.arsize
+    axi4.ar.bits.burst     := core.dma.arburst
+    axi4.ar.bits.lock      := core.dma.arlock
+    axi4.ar.bits.cache     := core.dma.arcache
+    axi4.ar.bits.prot      := core.dma.arprot
+    axi4.ar.bits.qos       := core.dma.arqos
 
-    core.io_dma.r_valid              := axi4.r.valid
-    axi4.r.ready                     := core.io_dma.r_ready
-    core.io_dma.r_bits_id            := axi4.r.bits.id
-    core.io_dma.r_bits_data          := axi4.r.bits.data
-    core.io_dma.r_bits_resp          := axi4.r.bits.resp
-    core.io_dma.r_bits_last          := axi4.r.bits.last
+    core.dma.rvalid        := axi4.r.valid
+    axi4.r.ready           := core.dma.rready
+    core.dma.rid           := axi4.r.bits.id
+    core.dma.rdata         := axi4.r.bits.data
+    core.dma.rresp         := axi4.r.bits.resp
+    core.dma.rlast         := axi4.r.bits.last
   }
 
-  // ---- cacheable_check [CONFIRMED tie-off strategy, port names TODO] ----
-  // Per baseline doc: no internal consumer anywhere; tie req.valid = 0,
-  // leave resp unconnected. Cannot write the actual tie-off lines until
-  // XSTopBlackBox.scala's io_cacheable_check_* fields are filled in from
-  // a grep of XSTop.sv (see TODO there).
+  // ---- cacheable_check [CONFIRMED — tie-off, per baseline doc] ----
+  // No internal consumer anywhere; tie every req input to 0. resp outputs
+  // are BlackBox outputs and don't need a sink.
+  core.io_cacheable_check_req_0_valid     := false.B
+  core.io_cacheable_check_req_0_bits_addr := 0.U
+  core.io_cacheable_check_req_0_bits_size := 0.U
+  core.io_cacheable_check_req_0_bits_cmd  := 0.U
+  core.io_cacheable_check_req_1_valid     := false.B
+  core.io_cacheable_check_req_1_bits_addr := 0.U
+  core.io_cacheable_check_req_1_bits_size := 0.U
+  core.io_cacheable_check_req_1_bits_cmd  := 0.U
+
+  // ---- trace interface [CONFIRMED — tie-off for first bring-up] ----
+  core.io_traceCoreInterface_0_fromEncoder_enable := false.B
+  core.io_traceCoreInterface_0_fromEncoder_stall  := false.B
+  // toEncoder_* outputs left unconnected — not needed until trace is wired up.
 
   // ---- Misc tie-offs for first bring-up [CONFIRMED] ----
   core.io_sram_config := 0.U
