@@ -48,3 +48,8 @@ logs/
 workloads/
 images/
 disk-images/
+
+# Scala
+.bsp
+.metals
+.scala-build

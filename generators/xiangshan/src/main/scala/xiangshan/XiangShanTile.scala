@@ -37,6 +37,8 @@ import freechips.rocketchip.tile._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.util._
+import freechips.rocketchip.prci.ClockCrossingType
+import freechips.rocketchip.prci.ClockSinkParameters
 
 // ---------------------------------------------------------------------
 // Core / tile parameter case classes
@@ -56,6 +58,9 @@ import freechips.rocketchip.util._
   * driving anything real here).
   */
 case class XiangShanCoreParams(
+  xLen: Int = 64,                         // XiangShan is RV64-only
+  pgLevels: Int = 3,                      // sv39 — confirmed via build/XSTop.dts riscv,isa-extensions
+                                           // (no sv48/sv57 flag seen); inert for a blackbox core either way
   bootFreqHz: BigInt = BigInt(1000000000),
   useVM: Boolean = true,
   useUser: Boolean = true,
@@ -65,14 +70,21 @@ case class XiangShanCoreParams(
   useAtomics: Boolean = true,
   useAtomicsOnlyForIO: Boolean = false,
   useCompressed: Boolean = true,          // "c" in riscv,isa-extensions
-  useVector: Boolean = true,              // "v"/"zv*" in riscv,isa-extensions — NOTE: base CoreParams
-                                           // may not expose this field on older rocket-chip; if compile
-                                           // fails here, this belongs in a vector-specific subtrait instead.
+  override val useVector: Boolean = true, // "v"/"zv*" in riscv,isa-extensions — CoreParams gives this
+                                           // field a default (= false), so it must be `override`d here
+                                           // (confirmed against rocket-chip/src/main/scala/tile/Core.scala)
   useRVE: Boolean = false,
   useConditionalZero: Boolean = true,     // zicond
   mulDiv: Option[MulDivParams] = Some(MulDivParams()),
   fpu: Option[FPUParams] = Some(FPUParams()),
+  fetchWidth: Int = 8,                    // [INERT PLACEHOLDER] no Chipyard-side icache/decode logic
+                                           // reads this for a blackbox core (icache = None below); real
+                                           // XiangShan fetch width is internal to XSTop, not modeled here
+  decodeWidth: Int = 1,                   // inert for a blackbox core; some CoreParams variants omit this field
+  retireWidth: Int = 8,                   // [INERT PLACEHOLDER] same reasoning as fetchWidth
+  instBits: Int = 32,
   nLocalInterrupts: Int = 0,
+  useNMI: Boolean = false,                // matches the nmi_0_0/nmi_0_1 tie-offs to false in XiangShanTileModuleImp
   nPMPs: Int = 0,                         // XSTop has its own internal PMA checker (see baseline doc
                                            // "io_cacheable_check — fully resolved"); Chipyard's PMP is unused.
   pmpGranularity: Int = 4,
@@ -82,6 +94,8 @@ case class XiangShanCoreParams(
   scontextWidth: Int = 0,
   nPerfCounters: Int = 0,
   haveBasicCounters: Boolean = true,
+  haveFSDirty: Boolean = false,           // [INERT PLACEHOLDER] Rocket-specific FPU dirty-bit tracking
+                                           // detail; XSTop's FPU state is internal and opaque to Chipyard
   haveCFlush: Boolean = false,
   misaWritable: Boolean = false,
   nL2TLBEntries: Int = 0,
@@ -89,9 +103,7 @@ case class XiangShanCoreParams(
   nPTECacheEntries: Int = 0,
   mtvecInit: Option[BigInt] = Some(BigInt(0)),
   mtvecWritable: Boolean = true,
-  instBits: Int = 32,
   lrscCycles: Int = 80,
-  decodeWidth: Int = 1,                   // inert for a blackbox core; some CoreParams variants omit this field
   traceHasWdata: Boolean = false,
   useZba: Boolean = true,
   useZbb: Boolean = true,
@@ -109,6 +121,9 @@ case class XiangShanTileParams(
   btb: Option[BTBParams] = None,
   trace: Boolean = false,                // flip true once io_traceCoreInterface_0_* is wired (TODO, see
                                           // XSTopBlackBox.scala)
+  blockerCtrlAddr: Option[BigInt] = None,        // required by TileParams; XiangShan has no TileLink
+                                                  // blocker device (matches RocketTileParams's default)
+  clockSinkParams: ClockSinkParameters = ClockSinkParameters(), // required by HierarchicalElementParams
   baseName: String = "xiangshan_tile",
   uniqueName: String = "xiangshan_tile_0"
 ) extends InstantiableTileParams[XiangShanTile] {
@@ -189,21 +204,38 @@ class XiangShanTile private (
   // hung off tlSlaveXbar / this tile's slaveNode rather than reusing
   // XiangShan's internal chain (which we don't have access to — XSTop is
   // opaque past its port boundary).
-  val dmaAXI4Node = AXI4SlaveNode(Seq(AXI4SlavePortParameters(
+  /* val dmaAXI4Node = AXI4SlaveNode(Seq(AXI4SlavePortParameters(
     Seq(AXI4SlaveParameters(
       address       = Seq(AddressSet(0x0, (BigInt(1) << 48) - 1)),
       supportsWrite = TransferSizes(1, 256),
       supportsRead  = TransferSizes(1, 256))),
-    beatBytes = 32)))
+    beatBytes = 32))) */
 
-  (dmaAXI4Node
+  /* (dmaAXI4Node
     := AXI4Buffer()
     := AXI4UserYanker()
     := AXI4Deinterleaver(64)
     := TLToAXI4()
     := TLWidthWidget(32)
     := TLBuffer()
-    := slaveNode)
+    := slaveNode) */
+
+  // Required by SinksExternalInterrupts (`def cpuDevice: Device`) --
+  // minimal device-tree "cpu" node, modeled on RocketTile's cpuDevice but
+  // with the Rocket-specific dtim/itim/beu properties dropped (XiangShan
+  // has no Chipyard-side DTIM/ITIM/bus-error-unit devices -- those, like
+  // the L1 caches, are internal to XSTop).
+  val cpuDevice: SimpleDevice = new SimpleDevice("cpu", Seq("ucb-bar,xiangshan", "riscv")) {
+    override def parent = Some(ResourceAnchors.cpus)
+    override def describe(resources: ResourceBindings): Description = {
+      val Description(name, mapping) = super.describe(resources)
+      Description(name, mapping ++ cpuProperties ++ nextLevelCacheProperty ++ tileProperties)
+    }
+  }
+
+  ResourceBinding {
+    Resource(cpuDevice, "reg").bind(ResourceAddress(tileId))
+  }
 
   override lazy val module = new XiangShanTileModuleImp(this)
 
@@ -246,16 +278,26 @@ class XiangShanTileModuleImp(outer: XiangShanTile) extends BaseTileModuleImp(out
   // own subsystem interrupt map assigns, since XiangShan (not Chipyard)
   // owns the PLIC here — Chipyard is only a source, never a sink, of
   // these 64 lines.
-  val interrupts = Wire(UInt(64.W))
-  interrupts := outer.decodeCoreInterrupts(interrupts.asBools)(0).asUInt // TODO: confirm exact API shape
-                                                                          // against the local rocket-chip
-                                                                          // version; this line is the
-                                                                          // most likely one to need
-                                                                          // adjustment.
-  core.io_extIntrs := interrupts
+  // `outer.decodeCoreInterrupts(...)` (SinksExternalInterrupts) has real
+  // signature `decodeCoreInterrupts(core: TileInterrupts): Unit` (confirmed
+  // against rocket-chip/src/main/scala/tile/Interrupts.scala) -- it wires
+  // a Wire(new TileInterrupts()) from the tile's own intSinkNode; it does
+  // not return anything to assign. It is also the WRONG shape for
+  // io_extIntrs: XSTop documents io_extIntrs[63:0] as "bit i -> internal
+  // PLIC source i+1" -- XiangShan has its OWN internal PLIC and wants raw,
+  // pre-arbitration external device interrupt sources, not the handful of
+  // already-arbitrated per-hart CLINT/PLIC lines (debug/mtip/msip/meip/
+  // seip) that TileInterrupts/decodeCoreInterrupts produce. Wiring those
+  // into io_extIntrs would compile but be semantically wrong.
+  // OPEN ISSUE: real fix needs a new diplomatic interrupt node on this
+  // tile tapping the subsystem's raw external/device interrupt sources
+  // (bypassing HasPeripheryPLIC's own consumption of them) -- not
+  // SinksExternalInterrupts. Deferred: tied to 0 for now, correct for a
+  // minimal bare-metal smoke test with no external interrupt sources.
+  core.io_extIntrs := 0.U
 
-  core.io_riscv_halt_0           // unconnected output, expose via SourcesExternalNotifications if desired
-  core.io_riscv_critical_error_0 // ditto
+  // core.io_riscv_halt_0 / core.io_riscv_critical_error_0 are outputs;
+  // left unconnected for now, expose via SourcesExternalNotifications if desired.
 
   // ---- AXI4 field-by-field connections [CONFIRMED field names —
   // flat AXI-standard short names, no `bits_` hierarchy, no `io_`
@@ -352,51 +394,19 @@ class XiangShanTileModuleImp(outer: XiangShanTile) extends BaseTileModuleImp(out
     axi4.r.bits.last         := core.peripheral.rlast
   }
 
-  // dma_* — XSTop is the slave; directions flip relative to the two
-  // master ports above (core drives b/r, external side drives aw/w/ar).
-  outer.dmaAXI4Node.in.foreach { case (axi4, _) =>
-    axi4.aw.valid          := core.dma.awvalid
-    core.dma.awready       := axi4.aw.ready
-    axi4.aw.bits.id        := core.dma.awid
-    axi4.aw.bits.addr      := core.dma.awaddr
-    axi4.aw.bits.len       := core.dma.awlen
-    axi4.aw.bits.size      := core.dma.awsize
-    axi4.aw.bits.burst     := core.dma.awburst
-    axi4.aw.bits.lock      := core.dma.awlock
-    axi4.aw.bits.cache     := core.dma.awcache
-    axi4.aw.bits.prot      := core.dma.awprot
-    axi4.aw.bits.qos       := core.dma.awqos
-
-    axi4.w.valid           := core.dma.wvalid
-    core.dma.wready        := axi4.w.ready
-    axi4.w.bits.data       := core.dma.wdata
-    axi4.w.bits.strb       := core.dma.wstrb
-    axi4.w.bits.last       := core.dma.wlast
-
-    core.dma.bvalid        := axi4.b.valid
-    axi4.b.ready           := core.dma.bready
-    core.dma.bid           := axi4.b.bits.id
-    core.dma.bresp         := axi4.b.bits.resp
-
-    axi4.ar.valid          := core.dma.arvalid
-    core.dma.arready       := axi4.ar.ready
-    axi4.ar.bits.id        := core.dma.arid
-    axi4.ar.bits.addr      := core.dma.araddr
-    axi4.ar.bits.len       := core.dma.arlen
-    axi4.ar.bits.size      := core.dma.arsize
-    axi4.ar.bits.burst     := core.dma.arburst
-    axi4.ar.bits.lock      := core.dma.arlock
-    axi4.ar.bits.cache     := core.dma.arcache
-    axi4.ar.bits.prot      := core.dma.arprot
-    axi4.ar.bits.qos       := core.dma.arqos
-
-    core.dma.rvalid        := axi4.r.valid
-    axi4.r.ready           := core.dma.rready
-    core.dma.rid           := axi4.r.bits.id
-    core.dma.rdata         := axi4.r.bits.data
-    core.dma.rresp         := axi4.r.bits.resp
-    core.dma.rlast         := axi4.r.bits.last
-  }
+  // dma_* unused for first bring-up (open issue #15): no inbound master, hold idle.
+  core.dma.awvalid := false.B; core.dma.awid := 0.U;   core.dma.awaddr  := 0.U
+  core.dma.awlen   := 0.U;     core.dma.awsize := 0.U; core.dma.awburst := 0.U
+  core.dma.awlock  := 0.U;     core.dma.awcache := 0.U; core.dma.awprot := 0.U
+  core.dma.awqos   := 0.U
+  core.dma.wvalid  := false.B; core.dma.wdata := 0.U;  core.dma.wstrb := 0.U
+  core.dma.wlast   := false.B
+  core.dma.bready  := false.B
+  core.dma.arvalid := false.B; core.dma.arid := 0.U;   core.dma.araddr  := 0.U
+  core.dma.arlen   := 0.U;     core.dma.arsize := 0.U; core.dma.arburst := 0.U
+  core.dma.arlock  := 0.U;     core.dma.arcache := 0.U; core.dma.arprot := 0.U
+  core.dma.arqos   := 0.U
+  core.dma.rready  := false.B
 
   // ---- cacheable_check [CONFIRMED — tie-off, per baseline doc] ----
   // No internal consumer anywhere; tie every req input to 0. resp outputs
@@ -422,14 +432,14 @@ class XiangShanTileModuleImp(outer: XiangShanTile) extends BaseTileModuleImp(out
   core.nmi_0_1        := false.B
   // core.io_pll0_ctrl_0..5 are outputs — left unconnected deliberately.
 
-  // ---- JTAG ----
-  // Wire from outer's systemjtag node the same way BaseTile's other
-  // Debug-attached tiles do (see how RocketTile/CVA6Tile source
-  // `outer.debugOpt`/systemjtag from the subsystem's DebugModuleKey) —
-  // NOT YET WIRED. This tile currently leaves io_systemjtag_* and
-  // io_debug_reset floating, which will not elaborate cleanly; needs a
-  // real JTAG DTM source once ExportDebug/JTAG is confirmed enabled in
-  // the target Chipyard config (BaseConfig sets
-  // ExportDebug(protocols = Set(JTAG)) per the baseline doc, so a JTAG
-  // source should already exist somewhere in the subsystem to tap).
+  // ---- JTAG: tied off for first bring-up (open issue #12) ----
+  // DTM held in reset; program loading goes via serial-TL/LOADMEM, not JTAG.
+  core.io_systemjtag_jtag_TCK      := false.B.asClock
+  core.io_systemjtag_jtag_TMS      := false.B
+  core.io_systemjtag_jtag_TDI      := false.B
+  core.io_systemjtag_reset         := true.B.asAsyncReset
+  core.io_systemjtag_mfr_id        := 0.U
+  core.io_systemjtag_part_number   := 0.U
+  core.io_systemjtag_version       := 0.U
+  // TDO_data, TDO_driven, io_debug_reset are outputs: left unconnected.
 }
