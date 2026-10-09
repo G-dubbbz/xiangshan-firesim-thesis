@@ -1,26 +1,31 @@
 // XiangShanTile.scala
 //
 // Chipyard tile wrapper around the XSTop blackbox (see XSTopBlackBox.scala).
-// Structure follows the Verilog-blackbox-tile pattern documented in
-// `xiangshan-baseline.md` ("Reference pattern for a Verilog-blackbox tile",
-// read directly from ucb-bar/cva6-wrapper's CVA6Tile.scala + Chipyard's
-// custom-core doc), adapted for XiangShan's three-AXI-port shape (two
-// masters instead of CVA6's one, plus one slave port with no CVA6
-// analogue at all).
+// Structure follows the Verilog-blackbox-tile pattern (ucb-bar/cva6-wrapper
+// CVA6Tile.scala + Chipyard custom-core doc), adapted for XiangShan's
+// three-AXI-port shape.
 //
-// STATUS: v0 draft, NOT YET COMPILED against the user's actual Chipyard/
-// rocket-chip checkout. AXI4 field names/widths and cacheable_check/
-// trace/clock/reset naming are now CONFIRMED against a full port dump of
-// the actual IDUN-built XSTop.sv (2026-09-21) — see XSTopBlackBox.scala's
-// header. `CoreParams` is still the main open risk: it's a trait whose
-// exact field list drifts across rocket-chip versions/forks — before
-// this compiles, diff the fields below against:
-//   grep -n "trait CoreParams" -A 60 \
-//     generators/rocket-chip/src/main/scala/tile/Core.scala
-// and adjust. Treat the first `sbt compile` output on this file as the
-// next debugging step, not a sign something was done wrong — this is
-// exactly the kind of incremental-validation problem the project favors
-// over guessing further from here.
+// STATUS (2026-10-09): compiles (`sbt "xiangshan/compile"`); Chipyard
+// elaboration of XiangShanConfig in progress. Changes made during
+// elaboration bring-up (see claude/xiangshan-elaboration-log.md):
+//   1. dma_* manager node removed (it claimed the whole 48-bit address
+//      space and overlapped DRAM); dma_* inputs tied idle. Open issue #15.
+//   2. tlMasterXbar routed out through tlOtherMastersNode -> masterNode
+//      (same as RocketTile.scala:119-120); without it the xbar had inputs
+//      but no outputs (IndexOutOfBoundsException in TLXbar managerFn).
+//   3. memory_* IDs compressed with AXI4IdIndexer(4) before the per-ID
+//      adapters; 14-bit IDs made AXI4UserYanker/AXI4ToTL build ~16k
+//      per-ID structures and the generator ran out of heap.
+//      TUNABLES (affect memory-level parallelism, check before benchmarking):
+//      AXI4IdIndexer bits = 4, AXI4UserYanker capacity = 8.
+//   4. memory_*/peripheral_* field wiring direction corrected: XSTop is the
+//      AXI4 MASTER on these ports (requests XSTop -> node).
+//   5. JTAG inputs tied off (DTM held in reset). Open issue #12.
+//
+// Toolchain note: after ANY edit to this file, run
+//   rm -f /work/chipyard/.classpath_cache/*.jar
+// before `make`, because `fd` is missing in the container and make will
+// otherwise reuse a stale chipyard.jar.
 
 package xiangshan
 
@@ -44,49 +49,35 @@ import freechips.rocketchip.prci.ClockSinkParameters
 // Core / tile parameter case classes
 // ---------------------------------------------------------------------
 
-/** [DRAFT — verify every field against the local CoreParams trait]
-  * Mostly-inert constants: XSTop is an opaque blackbox, so almost none of
-  * these actually influence generated hardware (no rocket/BOOM decode
-  * logic reads them). They exist to satisfy `CoreParams` and to feed the
-  * handful of BaseTile mechanisms that DO matter for a blackbox core:
-  * `mtvecInit`/`resetVectorLen` (-> resetVectorSinkNode -> io_riscv_rst_vec_0),
-  * and `nPMPs`/`pmpGranularity` if Chipyard's own PMP-adjacent plumbing
-  * is exercised anywhere in the subsystem (it generally isn't, for a
-  * blackbox core, since XSTop has its own internal PMA/PMP checker per
-  * the baseline doc's `io_cacheable_check` findings — XiangShan does its
-  * own permission checking, Chipyard's rocket-chip PMP machinery is not
-  * driving anything real here).
+/** Mostly-inert constants: XSTop is an opaque blackbox, so almost none of
+  * these influence generated hardware. They satisfy `CoreParams` (field
+  * list checked against rocket-chip tile/Core.scala) and feed the few
+  * BaseTile mechanisms that matter for a blackbox core (reset vector).
   */
 case class XiangShanCoreParams(
   xLen: Int = 64,                         // XiangShan is RV64-only
-  pgLevels: Int = 3,                      // sv39 — confirmed via build/XSTop.dts riscv,isa-extensions
-                                           // (no sv48/sv57 flag seen); inert for a blackbox core either way
+  pgLevels: Int = 3,                      // sv39; inert for a blackbox core
   bootFreqHz: BigInt = BigInt(1000000000),
   useVM: Boolean = true,
   useUser: Boolean = true,
   useSupervisor: Boolean = true,
-  useHypervisor: Boolean = true,          // MinimalConfig ISA includes "h" — confirmed via build/XSTop.dts riscv,isa-extensions
+  useHypervisor: Boolean = true,          // "h" in build/XSTop.dts riscv,isa-extensions
   useDebug: Boolean = true,
   useAtomics: Boolean = true,
   useAtomicsOnlyForIO: Boolean = false,
-  useCompressed: Boolean = true,          // "c" in riscv,isa-extensions
-  override val useVector: Boolean = true, // "v"/"zv*" in riscv,isa-extensions — CoreParams gives this
-                                           // field a default (= false), so it must be `override`d here
-                                           // (confirmed against rocket-chip/src/main/scala/tile/Core.scala)
+  useCompressed: Boolean = true,
+  override val useVector: Boolean = true, // CoreParams default is false, so override
   useRVE: Boolean = false,
   useConditionalZero: Boolean = true,     // zicond
   mulDiv: Option[MulDivParams] = Some(MulDivParams()),
   fpu: Option[FPUParams] = Some(FPUParams()),
-  fetchWidth: Int = 8,                    // [INERT PLACEHOLDER] no Chipyard-side icache/decode logic
-                                           // reads this for a blackbox core (icache = None below); real
-                                           // XiangShan fetch width is internal to XSTop, not modeled here
-  decodeWidth: Int = 1,                   // inert for a blackbox core; some CoreParams variants omit this field
-  retireWidth: Int = 8,                   // [INERT PLACEHOLDER] same reasoning as fetchWidth
+  fetchWidth: Int = 8,                    // [INERT PLACEHOLDER]
+  decodeWidth: Int = 1,                   // [INERT PLACEHOLDER]
+  retireWidth: Int = 8,                   // [INERT PLACEHOLDER]
   instBits: Int = 32,
   nLocalInterrupts: Int = 0,
-  useNMI: Boolean = false,                // matches the nmi_0_0/nmi_0_1 tie-offs to false in XiangShanTileModuleImp
-  nPMPs: Int = 0,                         // XSTop has its own internal PMA checker (see baseline doc
-                                           // "io_cacheable_check — fully resolved"); Chipyard's PMP is unused.
+  useNMI: Boolean = false,                // matches nmi_0_0/nmi_0_1 tie-offs
+  nPMPs: Int = 0,                         // XSTop has its own internal PMA/PMP
   pmpGranularity: Int = 4,
   nBreakpoints: Int = 0,
   useBPWatch: Boolean = false,
@@ -94,8 +85,7 @@ case class XiangShanCoreParams(
   scontextWidth: Int = 0,
   nPerfCounters: Int = 0,
   haveBasicCounters: Boolean = true,
-  haveFSDirty: Boolean = false,           // [INERT PLACEHOLDER] Rocket-specific FPU dirty-bit tracking
-                                           // detail; XSTop's FPU state is internal and opaque to Chipyard
+  haveFSDirty: Boolean = false,           // [INERT PLACEHOLDER]
   haveCFlush: Boolean = false,
   misaWritable: Boolean = false,
   nL2TLBEntries: Int = 0,
@@ -110,20 +100,16 @@ case class XiangShanCoreParams(
   useZbs: Boolean = true
 ) extends CoreParams
 
-/** [DRAFT] TileParams instantiation, mirroring CVA6TileParams's shape. */
 case class XiangShanTileParams(
   name: Option[String] = Some("xiangshan_tile"),
   tileId: Int = 0,
   core: XiangShanCoreParams = XiangShanCoreParams(),
-  icache: Option[ICacheParams] = None,   // XSTop has its own internal L1I; nothing for Chipyard's
-                                          // ICacheParams machinery to generate.
-  dcache: Option[DCacheParams] = None,   // same for L1D — XSTop's DCache is entirely internal.
+  icache: Option[ICacheParams] = None,   // L1I is internal to XSTop
+  dcache: Option[DCacheParams] = None,   // L1D is internal to XSTop
   btb: Option[BTBParams] = None,
-  trace: Boolean = false,                // flip true once io_traceCoreInterface_0_* is wired (TODO, see
-                                          // XSTopBlackBox.scala)
-  blockerCtrlAddr: Option[BigInt] = None,        // required by TileParams; XiangShan has no TileLink
-                                                  // blocker device (matches RocketTileParams's default)
-  clockSinkParams: ClockSinkParameters = ClockSinkParameters(), // required by HierarchicalElementParams
+  trace: Boolean = false,                // trace interface tied off for now
+  blockerCtrlAddr: Option[BigInt] = None,
+  clockSinkParams: ClockSinkParameters = ClockSinkParameters(),
   baseName: String = "xiangshan_tile",
   uniqueName: String = "xiangshan_tile_0"
 ) extends InstantiableTileParams[XiangShanTile] {
@@ -133,9 +119,6 @@ case class XiangShanTileParams(
   }
 }
 
-/** [DRAFT] CanAttachTile glue, same shape as every other tile attach params
-  * case class in Chipyard (`RocketTileAttachParams`, `CVA6TileAttachParams`, ...).
-  */
 case class XiangShanTileAttachParams(
   tileParams: XiangShanTileParams,
   crossingParams: HierarchicalElementCrossingParamsLike
@@ -145,14 +128,9 @@ case class XiangShanTileAttachParams(
 }
 
 // ---------------------------------------------------------------------
-// Tile
+// Tile (diplomatic nodes only; XSTop is instantiated in the ModuleImp)
 // ---------------------------------------------------------------------
 
-/** [DRAFT] Declares diplomatic nodes only — no XiangShan RTL lives here,
-  * only the AXI4<->TileLink bridging and the tile-level plumbing BaseTile
-  * expects. The actual XSTop instantiation happens in
-  * XiangShanTileModuleImp below.
-  */
 class XiangShanTile private (
   val xiangshanParams: XiangShanTileParams,
   crossing: ClockCrossingType,
@@ -166,8 +144,9 @@ class XiangShanTile private (
            (implicit p: Parameters) =
     this(params, crossing.crossingType, lookup, p)
 
-  // No RoCC / custom tile-internal slave target beyond what dma_* needs
-  // (matches CVA6Tile.scala exactly).
+  // No tile-internal slave devices (dma_* is disabled, see below), so
+  // slaveNode stays unconnected and tlSlaveXbar is deliberately NOT wired
+  // to it: an xbar with inputs but no outputs fails diplomacy.
   val intOutwardNode = None
   val slaveNode = TLIdentityNode()
   val masterNode = visibilityNode
@@ -178,11 +157,12 @@ class XiangShanTile private (
 
   (tlMasterXbar.node
     := TLBuffer()
-    := TLWidthWidget(32)  // 256 bits = 32 bytes; matches AXI4 data width exactly, no narrowing needed
+    := TLWidthWidget(32)         // 256 bits = 32 bytes
     := TLFIFOFixer()
     := AXI4ToTL()
-    := AXI4UserYanker(Some(1))
+    := AXI4UserYanker(Some(8))   // TUNABLE: up to 8 in flight per compressed ID
     := AXI4Fragmenter()
+    := AXI4IdIndexer(4)          // TUNABLE: 14-bit XSTop IDs -> 16 IDs (XiangShan's own DMA chain does the same)
     := memAXI4Node)
 
   // ---- peripheral_* : uncached MMIO master (31-bit addr, 64-bit data, 2-bit id) ----
@@ -191,40 +171,27 @@ class XiangShanTile private (
 
   (tlMasterXbar.node
     := TLBuffer()
-    := TLWidthWidget(8)   // 64 bits = 8 bytes
+    := TLWidthWidget(8)          // 64 bits = 8 bytes
     := TLFIFOFixer()
     := AXI4ToTL()
     := AXI4UserYanker(Some(1))
     := AXI4Fragmenter()
     := periphAXI4Node)
 
-  // ---- dma_* : XSTop is the AXI4 SLAVE here (inbound DMA into XiangShan's
-  // coherence domain) — the reverse chain of SoC.scala's own
-  // HaveSlaveAXI4Port trait (baseline doc, "dma_* — confirmed"),
-  // hung off tlSlaveXbar / this tile's slaveNode rather than reusing
-  // XiangShan's internal chain (which we don't have access to — XSTop is
-  // opaque past its port boundary).
-  /* val dmaAXI4Node = AXI4SlaveNode(Seq(AXI4SlavePortParameters(
-    Seq(AXI4SlaveParameters(
-      address       = Seq(AddressSet(0x0, (BigInt(1) << 48) - 1)),
-      supportsWrite = TransferSizes(1, 256),
-      supportsRead  = TransferSizes(1, 256))),
-    beatBytes = 32))) */
+  // Route the tile's internal master xbar out of the tile
+  // (same as RocketTile.scala:119-120; no master blocker since blockerCtrlAddr = None).
+  tlOtherMastersNode := tlMasterXbar.node
+  masterNode :=* tlOtherMastersNode
 
-  /* (dmaAXI4Node
-    := AXI4Buffer()
-    := AXI4UserYanker()
-    := AXI4Deinterleaver(64)
-    := TLToAXI4()
-    := TLWidthWidget(32)
-    := TLBuffer()
-    := slaveNode) */
+  // ---- dma_* : DISABLED for first bring-up (open issue #15) ----
+  // The earlier AXI4SlaveNode declared AddressSet(0x0, 2^48-1) and
+  // overlapped DRAM. Correct design: a TL CLIENT path converted TL->AXI4
+  // that drives dma_* as AXI master and declares no address range.
+  // Not needed for bare-metal tests; XSTop's dma_* inputs are tied idle
+  // in the ModuleImp.
 
-  // Required by SinksExternalInterrupts (`def cpuDevice: Device`) --
-  // minimal device-tree "cpu" node, modeled on RocketTile's cpuDevice but
-  // with the Rocket-specific dtim/itim/beu properties dropped (XiangShan
-  // has no Chipyard-side DTIM/ITIM/bus-error-unit devices -- those, like
-  // the L1 caches, are internal to XSTop).
+  // Device-tree "cpu" node required by SinksExternalInterrupts.
+  // Modeled on RocketTile's cpuDevice without dtim/itim/beu properties.
   val cpuDevice: SimpleDevice = new SimpleDevice("cpu", Seq("ucb-bar,xiangshan", "riscv")) {
     override def parent = Some(ResourceAnchors.cpus)
     override def describe(resources: ResourceBindings): Description = {
@@ -238,13 +205,6 @@ class XiangShanTile private (
   }
 
   override lazy val module = new XiangShanTileModuleImp(this)
-
-  // Required by SinksExternalInterrupts — a single hart's worth of the
-  // io_extIntrs[63:0] vector, wired by decodeCoreInterrupts() in the
-  // ModuleImp. nLocalInterrupts is otherwise 0 (see CoreParams above);
-  // int line count here corresponds to what Chipyard-side devices will
-  // route into io_extIntrs, decided at the WithNXiangShanCores /
-  // subsystem-interrupt-map level, not fixed in this file.
 }
 
 // ---------------------------------------------------------------------
@@ -255,162 +215,91 @@ class XiangShanTileModuleImp(outer: XiangShanTile) extends BaseTileModuleImp(out
 
   val core = Module(new XSTop)
 
-  // ---- Clock / reset [CONFIRMED — XSTop's actual ports are io_clock/
-  // io_reset, NOT bare clock/reset; a Chisel BlackBox has no implicit
-  // clock/reset the way a Module does, so this must be explicit] ----
+  // ---- Clock / reset (XSTop ports are io_clock/io_reset) ----
   core.io_clock := clock
   core.io_reset := reset.asAsyncReset
-  // core.io_rtc_clock must be driven from a real RTC clock source, not
-  // tied off — wire to whatever Chipyard's own RTC/timer clock domain is
-  // (e.g. `outer.rtcClockNode` if one is added, or the system's existing
-  // low-frequency reference clock). NOT YET WIRED — placeholder:
-  core.io_rtc_clock := clock  // TODO: replace with a real RTC domain before Verilator bring-up
+  // TODO (open issue #12): io_rtc_clock should come from a real RTC domain.
+  // Tied to the core clock for now: mtime ticks at core frequency.
+  core.io_rtc_clock := clock
 
-  // ---- Reset vector [CONFIRMED via BaseTile.resetVectorSinkNode] ----
+  // ---- Reset vector ----
   core.io_riscv_rst_vec_0 := outer.resetVectorSinkNode.bundle
 
-  // ---- Interrupts [CONFIRMED bit mapping — baseline doc open issue #2] ----
-  // outer.decodeCoreInterrupts(...) is rocket-chip's standard helper that
-  // turns the tile's interruptSourceNode bundle into a flat Vec/UInt in
-  // priority order; here it must line up 1:1 with io_extIntrs bit i ->
-  // XiangShan-internal PLIC source i+1. Verify the ordering
-  // decodeCoreInterrupts produces matches the source ordering Chipyard's
-  // own subsystem interrupt map assigns, since XiangShan (not Chipyard)
-  // owns the PLIC here — Chipyard is only a source, never a sink, of
-  // these 64 lines.
-  // `outer.decodeCoreInterrupts(...)` (SinksExternalInterrupts) has real
-  // signature `decodeCoreInterrupts(core: TileInterrupts): Unit` (confirmed
-  // against rocket-chip/src/main/scala/tile/Interrupts.scala) -- it wires
-  // a Wire(new TileInterrupts()) from the tile's own intSinkNode; it does
-  // not return anything to assign. It is also the WRONG shape for
-  // io_extIntrs: XSTop documents io_extIntrs[63:0] as "bit i -> internal
-  // PLIC source i+1" -- XiangShan has its OWN internal PLIC and wants raw,
-  // pre-arbitration external device interrupt sources, not the handful of
-  // already-arbitrated per-hart CLINT/PLIC lines (debug/mtip/msip/meip/
-  // seip) that TileInterrupts/decodeCoreInterrupts produce. Wiring those
-  // into io_extIntrs would compile but be semantically wrong.
-  // OPEN ISSUE: real fix needs a new diplomatic interrupt node on this
-  // tile tapping the subsystem's raw external/device interrupt sources
-  // (bypassing HasPeripheryPLIC's own consumption of them) -- not
-  // SinksExternalInterrupts. Deferred: tied to 0 for now, correct for a
-  // minimal bare-metal smoke test with no external interrupt sources.
+  // ---- Interrupts (open issue #14) ----
+  // io_extIntrs[i] -> XiangShan-internal PLIC source i+1. It needs raw
+  // device interrupt sources, which TileInterrupts/decodeCoreInterrupts do
+  // not provide. Tied to 0 for bare-metal bring-up.
   core.io_extIntrs := 0.U
 
-  // core.io_riscv_halt_0 / core.io_riscv_critical_error_0 are outputs;
-  // left unconnected for now, expose via SourcesExternalNotifications if desired.
+  // io_riscv_halt_0 / io_riscv_critical_error_0: outputs, unconnected for now.
 
-  // ---- AXI4 field-by-field connections [CONFIRMED field names —
-  // flat AXI-standard short names, no `bits_` hierarchy, no `io_`
-  // prefix — see XSTopBlackBox.scala / baseline doc for the full
-  // grep-verified port dump this is transcribed from] ----
+  // ---- memory_* / peripheral_* ----
+  // XSTop is the AXI4 MASTER on these ports: request channels and response
+  // `ready` flow XSTop -> node; response channels and request `ready` flow
+  // node -> XSTop. Field names/widths from the IDUN XSTop.sv port dump.
+  def connectXSMaster(axi4: AXI4Bundle, p: XSTopAXI4Port): Unit = {
+    axi4.aw.valid      := p.awvalid
+    p.awready          := axi4.aw.ready
+    axi4.aw.bits.id    := p.awid
+    axi4.aw.bits.addr  := p.awaddr
+    axi4.aw.bits.len   := p.awlen
+    axi4.aw.bits.size  := p.awsize
+    axi4.aw.bits.burst := p.awburst
+    axi4.aw.bits.lock  := p.awlock
+    axi4.aw.bits.cache := p.awcache
+    axi4.aw.bits.prot  := p.awprot
+    axi4.aw.bits.qos   := p.awqos
 
-  // memory_*
-  outer.memAXI4Node.out.foreach { case (axi4, _) =>
-    core.memory.awvalid   := axi4.aw.valid
-    axi4.aw.ready         := core.memory.awready
-    core.memory.awid      := axi4.aw.bits.id
-    core.memory.awaddr    := axi4.aw.bits.addr
-    core.memory.awlen     := axi4.aw.bits.len
-    core.memory.awsize    := axi4.aw.bits.size
-    core.memory.awburst   := axi4.aw.bits.burst
-    core.memory.awlock    := axi4.aw.bits.lock
-    core.memory.awcache   := axi4.aw.bits.cache
-    core.memory.awprot    := axi4.aw.bits.prot
-    core.memory.awqos     := axi4.aw.bits.qos
+    axi4.w.valid       := p.wvalid
+    p.wready           := axi4.w.ready
+    axi4.w.bits.data   := p.wdata
+    axi4.w.bits.strb   := p.wstrb
+    axi4.w.bits.last   := p.wlast
 
-    core.memory.wvalid    := axi4.w.valid
-    axi4.w.ready          := core.memory.wready
-    core.memory.wdata     := axi4.w.bits.data
-    core.memory.wstrb     := axi4.w.bits.strb
-    core.memory.wlast     := axi4.w.bits.last
+    p.bvalid           := axi4.b.valid
+    axi4.b.ready       := p.bready
+    p.bid              := axi4.b.bits.id
+    p.bresp            := axi4.b.bits.resp
 
-    axi4.b.valid          := core.memory.bvalid
-    core.memory.bready    := axi4.b.ready
-    axi4.b.bits.id        := core.memory.bid
-    axi4.b.bits.resp      := core.memory.bresp
+    axi4.ar.valid      := p.arvalid
+    p.arready          := axi4.ar.ready
+    axi4.ar.bits.id    := p.arid
+    axi4.ar.bits.addr  := p.araddr
+    axi4.ar.bits.len   := p.arlen
+    axi4.ar.bits.size  := p.arsize
+    axi4.ar.bits.burst := p.arburst
+    axi4.ar.bits.lock  := p.arlock
+    axi4.ar.bits.cache := p.arcache
+    axi4.ar.bits.prot  := p.arprot
+    axi4.ar.bits.qos   := p.arqos
 
-    core.memory.arvalid   := axi4.ar.valid
-    axi4.ar.ready         := core.memory.arready
-    core.memory.arid      := axi4.ar.bits.id
-    core.memory.araddr    := axi4.ar.bits.addr
-    core.memory.arlen     := axi4.ar.bits.len
-    core.memory.arsize    := axi4.ar.bits.size
-    core.memory.arburst   := axi4.ar.bits.burst
-    core.memory.arlock    := axi4.ar.bits.lock
-    core.memory.arcache   := axi4.ar.bits.cache
-    core.memory.arprot    := axi4.ar.bits.prot
-    core.memory.arqos     := axi4.ar.bits.qos
-
-    axi4.r.valid          := core.memory.rvalid
-    core.memory.rready    := axi4.r.ready
-    axi4.r.bits.id        := core.memory.rid
-    axi4.r.bits.data      := core.memory.rdata
-    axi4.r.bits.resp      := core.memory.rresp
-    axi4.r.bits.last      := core.memory.rlast
+    p.rvalid           := axi4.r.valid
+    axi4.r.ready       := p.rready
+    p.rid              := axi4.r.bits.id
+    p.rdata            := axi4.r.bits.data
+    p.rresp            := axi4.r.bits.resp
+    p.rlast            := axi4.r.bits.last
   }
 
-  // peripheral_* — identical shape to memory_*, narrower widths.
-  outer.periphAXI4Node.out.foreach { case (axi4, _) =>
-    core.peripheral.awvalid := axi4.aw.valid
-    axi4.aw.ready            := core.peripheral.awready
-    core.peripheral.awid     := axi4.aw.bits.id
-    core.peripheral.awaddr   := axi4.aw.bits.addr
-    core.peripheral.awlen    := axi4.aw.bits.len
-    core.peripheral.awsize   := axi4.aw.bits.size
-    core.peripheral.awburst  := axi4.aw.bits.burst
-    core.peripheral.awlock   := axi4.aw.bits.lock
-    core.peripheral.awcache  := axi4.aw.bits.cache
-    core.peripheral.awprot   := axi4.aw.bits.prot
-    core.peripheral.awqos    := axi4.aw.bits.qos
+  outer.memAXI4Node.out.foreach    { case (axi4, _) => connectXSMaster(axi4, core.memory) }
+  outer.periphAXI4Node.out.foreach { case (axi4, _) => connectXSMaster(axi4, core.peripheral) }
 
-    core.peripheral.wvalid   := axi4.w.valid
-    axi4.w.ready             := core.peripheral.wready
-    core.peripheral.wdata    := axi4.w.bits.data
-    core.peripheral.wstrb    := axi4.w.bits.strb
-    core.peripheral.wlast    := axi4.w.bits.last
-
-    axi4.b.valid             := core.peripheral.bvalid
-    core.peripheral.bready   := axi4.b.ready
-    axi4.b.bits.id           := core.peripheral.bid
-    axi4.b.bits.resp         := core.peripheral.bresp
-
-    core.peripheral.arvalid  := axi4.ar.valid
-    axi4.ar.ready            := core.peripheral.arready
-    core.peripheral.arid     := axi4.ar.bits.id
-    core.peripheral.araddr   := axi4.ar.bits.addr
-    core.peripheral.arlen    := axi4.ar.bits.len
-    core.peripheral.arsize   := axi4.ar.bits.size
-    core.peripheral.arburst  := axi4.ar.bits.burst
-    core.peripheral.arlock   := axi4.ar.bits.lock
-    core.peripheral.arcache  := axi4.ar.bits.cache
-    core.peripheral.arprot   := axi4.ar.bits.prot
-    core.peripheral.arqos    := axi4.ar.bits.qos
-
-    axi4.r.valid             := core.peripheral.rvalid
-    core.peripheral.rready   := axi4.r.ready
-    axi4.r.bits.id           := core.peripheral.rid
-    axi4.r.bits.data         := core.peripheral.rdata
-    axi4.r.bits.resp         := core.peripheral.rresp
-    axi4.r.bits.last         := core.peripheral.rlast
-  }
-
-  // dma_* unused for first bring-up (open issue #15): no inbound master, hold idle.
-  core.dma.awvalid := false.B; core.dma.awid := 0.U;   core.dma.awaddr  := 0.U
-  core.dma.awlen   := 0.U;     core.dma.awsize := 0.U; core.dma.awburst := 0.U
-  core.dma.awlock  := 0.U;     core.dma.awcache := 0.U; core.dma.awprot := 0.U
+  // ---- dma_* : unused for first bring-up (open issue #15), hold idle ----
+  // XSTop is the AXI4 slave here, so these are XSTop inputs.
+  core.dma.awvalid := false.B; core.dma.awid := 0.U;    core.dma.awaddr  := 0.U
+  core.dma.awlen   := 0.U;     core.dma.awsize := 0.U;  core.dma.awburst := 0.U
+  core.dma.awlock  := 0.U;     core.dma.awcache := 0.U; core.dma.awprot  := 0.U
   core.dma.awqos   := 0.U
-  core.dma.wvalid  := false.B; core.dma.wdata := 0.U;  core.dma.wstrb := 0.U
+  core.dma.wvalid  := false.B; core.dma.wdata := 0.U;   core.dma.wstrb   := 0.U
   core.dma.wlast   := false.B
   core.dma.bready  := false.B
-  core.dma.arvalid := false.B; core.dma.arid := 0.U;   core.dma.araddr  := 0.U
-  core.dma.arlen   := 0.U;     core.dma.arsize := 0.U; core.dma.arburst := 0.U
-  core.dma.arlock  := 0.U;     core.dma.arcache := 0.U; core.dma.arprot := 0.U
+  core.dma.arvalid := false.B; core.dma.arid := 0.U;    core.dma.araddr  := 0.U
+  core.dma.arlen   := 0.U;     core.dma.arsize := 0.U;  core.dma.arburst := 0.U
+  core.dma.arlock  := 0.U;     core.dma.arcache := 0.U; core.dma.arprot  := 0.U
   core.dma.arqos   := 0.U
   core.dma.rready  := false.B
 
-  // ---- cacheable_check [CONFIRMED — tie-off, per baseline doc] ----
-  // No internal consumer anywhere; tie every req input to 0. resp outputs
-  // are BlackBox outputs and don't need a sink.
+  // ---- cacheable_check: no consumer anywhere, tie requests off ----
   core.io_cacheable_check_req_0_valid     := false.B
   core.io_cacheable_check_req_0_bits_addr := 0.U
   core.io_cacheable_check_req_0_bits_size := 0.U
@@ -420,26 +309,25 @@ class XiangShanTileModuleImp(outer: XiangShanTile) extends BaseTileModuleImp(out
   core.io_cacheable_check_req_1_bits_size := 0.U
   core.io_cacheable_check_req_1_bits_cmd  := 0.U
 
-  // ---- trace interface [CONFIRMED — tie-off for first bring-up] ----
+  // ---- Trace interface: tied off for first bring-up ----
   core.io_traceCoreInterface_0_fromEncoder_enable := false.B
   core.io_traceCoreInterface_0_fromEncoder_stall  := false.B
-  // toEncoder_* outputs left unconnected — not needed until trace is wired up.
 
-  // ---- Misc tie-offs for first bring-up [CONFIRMED] ----
+  // ---- Misc tie-offs ----
   core.io_sram_config := 0.U
   core.io_pll0_lock   := true.B
   core.nmi_0_0        := false.B
   core.nmi_0_1        := false.B
-  // core.io_pll0_ctrl_0..5 are outputs — left unconnected deliberately.
+  // io_pll0_ctrl_0..5 are outputs, left unconnected.
 
   // ---- JTAG: tied off for first bring-up (open issue #12) ----
-  // DTM held in reset; program loading goes via serial-TL/LOADMEM, not JTAG.
-  core.io_systemjtag_jtag_TCK      := false.B.asClock
-  core.io_systemjtag_jtag_TMS      := false.B
-  core.io_systemjtag_jtag_TDI      := false.B
-  core.io_systemjtag_reset         := true.B.asAsyncReset
-  core.io_systemjtag_mfr_id        := 0.U
-  core.io_systemjtag_part_number   := 0.U
-  core.io_systemjtag_version       := 0.U
-  // TDO_data, TDO_driven, io_debug_reset are outputs: left unconnected.
+  // DTM held in reset; program loading uses serial-TL/LOADMEM, not JTAG.
+  core.io_systemjtag_jtag_TCK    := false.B.asClock
+  core.io_systemjtag_jtag_TMS    := false.B
+  core.io_systemjtag_jtag_TDI    := false.B
+  core.io_systemjtag_reset       := true.B.asAsyncReset
+  core.io_systemjtag_mfr_id      := 0.U
+  core.io_systemjtag_part_number := 0.U
+  core.io_systemjtag_version     := 0.U
+  // TDO_data, TDO_driven, io_debug_reset are outputs, left unconnected.
 }
