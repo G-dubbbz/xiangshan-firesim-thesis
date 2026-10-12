@@ -3,6 +3,8 @@
 Repository for thesis-specific code, configurations, scripts, patches,
 documentation, and reproducible experiment metadata.
 
+**Rebuild the XiangShan-in-Chipyard setup from scratch:** see [`docs/REPRODUCE.md`](docs/REPRODUCE.md).
+
 ## Environments
 - Mac: editing, code review, small smoke tests, documentation
 - IDUN: synthesis, large builds, FPGA/simulator jobs, benchmarks

@@ -53,3 +53,8 @@ disk-images/
 .bsp
 .metals
 .scala-build
+# IDUN: persistent workspace (Chipyard checkout, xs-env) lives under work/ inside this repo dir
+work/
+
+# Backups made by scripts/xs_install_into_chipyard.sh
+*.bak-*

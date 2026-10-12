@@ -1,0 +1,26 @@
+diff --git a/build.sbt b/build.sbt
+index f56621c..27dc6f0 100644
+--- a/build.sbt
++++ b/build.sbt
+@@ -180,6 +180,7 @@ lazy val chipyard = {
+       testchipip, rocketchip, boom, rocketchip_blocks, rocketchip_inclusive_cache,
+       icenet, tracegen,
+       constellation, barf, shuttle, rerocc,
++      xiangshan, // XiangShan Verilog-blackbox tile (thesis integration)
+     ).map(sbt.Project.projectToRef) ++
+     (if (useChisel7) Seq() else Seq(sbt.Project.projectToRef(firrtl2_bridge))) ++
+     (if (useChisel7) Seq() else Seq(sbt.Project.projectToRef(dsptools), sbt.Project.projectToRef(rocket_dsp_utils)))
+@@ -349,6 +350,13 @@ lazy val ibex = withInitCheck((project in file("generators/ibex")), "ibex")
+   .settings(libraryDependencies ++= rocketLibDeps.value)
+   .settings(commonSettings)
+ 
++// XiangShan Verilog-blackbox tile (thesis integration). Plain directory, not a
++// git submodule, so it is listed in baseProjects instead of optionalModules.
++lazy val xiangshan = (project in file("generators/xiangshan"))
++  .dependsOn(rocketchip)
++  .settings(libraryDependencies ++= rocketLibDeps.value)
++  .settings(commonSettings)
++
+ lazy val vexiiriscv = withInitCheck((project in file("generators/vexiiriscv")), "vexiiriscv")
+   .dependsOn(rocketchip)
+   .settings(libraryDependencies ++= rocketLibDeps.value)

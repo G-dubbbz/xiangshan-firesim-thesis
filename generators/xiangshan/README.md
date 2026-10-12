@@ -1,96 +1,28 @@
-# generators/xiangshan — setup & staging steps
+# generators/xiangshan
 
-This is a **v0 draft** of the Verilog-blackbox Chipyard tile for XiangShan.
-None of it has been compiled against a real Chipyard/rocket-chip checkout
-yet. Treat the first `sbt compile` as the next debugging step, and work
-through its errors the same incremental way the rest of this project's
-open issues were resolved (see `xiangshan-baseline.md` in the "Project
-thesis" Claude Project).
+Chipyard generator that wraps XiangShan's generated `XSTop` Verilog as a
+Chipyard tile. Status: elaborates, builds in direct Chipyard Verilator, and runs
+bare-metal code (UART "Hello XiangShan" smoke test, 2026-10-11).
 
-## 1. Register the project in Chipyard's `build.sbt`
+Full rebuild instructions: [`docs/REPRODUCE.md`](../../docs/REPRODUCE.md).
 
-Per the baseline doc's "Chipyard build baseline" section, add a
-`lazy val xiangshan` project the same way `cva6`/`ibex` are added, and
-list it in `chipyard`'s `.dependsOn(...)`:
+| File | Role |
+|---|---|
+| `src/main/scala/xiangshan/XSTopBlackBox.scala` | `XSTop` as a Chisel `ExtModule`; every port matches `build/rtl/XSTop.sv`. The `addResource` list at the bottom is **generated** by `scripts/xs_stage_rtl.sh`. |
+| `src/main/scala/xiangshan/XiangShanTile.scala` | Tile params, diplomatic nodes (AXI4→TileLink bridges for `memory_*` and `peripheral_*`), XSTop wiring and tie-offs, reset-vector override, and a temporary `[XSPROBE]` debug probe. |
+| `src/main/scala/xiangshan/Configs.scala` | `WithNXiangShanCores(n)`, `WithXiangShanSystemBusWidth` (256-bit sbus). |
+| `src/main/resources/vsrc/` | **Not committed.** Filled by `scripts/xs_stage_rtl.sh` from a clean XiangShan `make verilog` (~1581 files, all modules except `XSTop` prefixed `XS_`). |
 
-```scala
-lazy val xiangshan = (project in file("generators/xiangshan"))
-  .dependsOn(rocketchip, rocketMacros)
-  .settings(commonSettings)
-```
+The top-level Chipyard config (`XiangShanConfig`) lives in
+`configs/XiangShanConfigs.scala`, and the `build.sbt` change in
+`patches/chipyard/xiangshan-build-sbt.patch`. `scripts/xs_install_into_chipyard.sh`
+installs all three into a Chipyard checkout.
 
-Then add `xiangshan` to the `chipyard` project's own dependency list.
-
-## 2. Stage the generated Verilog
-
-From a **clean** XiangShan build (per the baseline doc's open issue #5 —
-do not reuse a `build/rtl` directory shared with a `sim-verilog`/`emu`
-run):
-
-```bash
-cd "$NOOP_HOME"
-rm -rf build
-make verilog CONFIG=MinimalConfig -j8
-```
-
-Then copy every `.sv`/`.v` file from `build/rtl` **except** `SimTop.sv`,
-`SimTop.sv.conf`, `SimTop.fir` into this generator's resource directory:
-
-```bash
-mkdir -p generators/xiangshan/src/main/resources/vsrc
-find build/rtl -maxdepth 1 -type f \( -name '*.sv' -o -name '*.v' \) \
-  ! -name 'SimTop.sv' \
-  -exec cp {} generators/xiangshan/src/main/resources/vsrc/ \;
-```
-
-(The 22 `Difftest*.v` files and `DummyDPICWrapper_*.sv` files ARE included
-here deliberately — confirmed safe no-ops when `DIFFTEST` is undefined,
-baseline doc open issue #6.)
-
-Then generate the matching `addResource(...)` lines for
-`XSTopBlackBox.scala` (there will be hundreds — do not hand-write them):
-
-```bash
-find generators/xiangshan/src/main/resources/vsrc -maxdepth 1 -type f \
-  -printf '  addResource("/vsrc/%f")\n' | sort
-```
-
-Paste that output in to replace the two placeholder `addResource` lines
-at the bottom of `XSTopBlackBox.scala`.
-
-## 3. Fill in the two TODO port blocks
-
-Two aggregate bundles in `XSTopBlackBox.scala` are stubbed out because
-their exact flattened Verilog field names were never individually
-enumerated in this session's research (everything else on the port list
-*was* confirmed against the uploaded `XSTop.sv`):
-
-```bash
-grep -oE 'io_cacheable_check_[a-zA-Z0-9_]+' build/rtl/XSTop.sv | sort -u
-grep -oE 'io_traceCoreInterface_0_[a-zA-Z0-9_]+' build/rtl/XSTop.sv | sort -u
-```
-
-Paste the output back so the blackbox IO and the tie-off/wiring code in
-`XiangShanTileModuleImp` can be completed exactly, rather than guessed.
-
-## 4. Also worth a quick sanity grep before first compile
-
-The AXI4 channel field names in `XSTopBlackBox.scala`
-(`io_memory_aw_ready`, etc.) follow the standard `VerilogAXI4Record`
-flattening convention but were not individually diffed against XSTop.sv
-line-by-line in this session:
-
-```bash
-grep -oE 'io_(memory|peripheral|dma)_[a-z_]+' build/rtl/XSTop.sv | sort -u
-```
-
-If any of these don't match, it's a fast, mechanical rename in
-`XSTopBlackBox.scala` — not a design problem.
-
-## 5. First validation target
-
-Per the project's required validation strategy: do **not** jump to
-FireSim or FPGA from here. First target is elaborating this config in
-direct Chipyard Verilator (`sims/verilator`) far enough to get a clean
-`chisel3`/`firrtl` elaboration + Verilator compile — a minimal bare-metal
-boot is the step after that, once elaboration itself is clean.
+Key integration decisions (details in docs/REPRODUCE.md):
+- `dma_*` is tied idle (no inbound DMA yet).
+- `memory_*` 14-bit AXI IDs are compressed with `AXI4IdIndexer(4)` +
+  `AXI4UserYanker(Some(8))`. These are performance tunables.
+- The tile boots at `0x80000000` (`resetVectorOverride`), because XiangShan's PMA
+  does not allow fetching from Chipyard's bootrom at `0x10000`.
+- `useVector = false` in the Chipyard-side params (DTS lacks `v`); JTAG, RTC
+  clock and external interrupts are tied off.

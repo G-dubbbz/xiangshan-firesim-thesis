@@ -133,7 +133,7 @@ def main():
         return
 
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    bdir = os.path.join(os.path.abspath(a.backup_dir), f"xs-prefix-backup-{stamp}")
+    bdir = os.path.join(os.path.abspath(a.backup_dir), f"xs-prefix-backup-{stamp}-{os.getpid()}")
     os.makedirs(bdir)
     shutil.copytree(vsrc, os.path.join(bdir, "vsrc"))
     shutil.copy2(a.scala, os.path.join(bdir, os.path.basename(a.scala)))
