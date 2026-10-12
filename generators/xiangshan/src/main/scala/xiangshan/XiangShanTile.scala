@@ -66,7 +66,7 @@ case class XiangShanCoreParams(
   useAtomics: Boolean = true,
   useAtomicsOnlyForIO: Boolean = false,
   useCompressed: Boolean = true,
-  override val useVector: Boolean = true, // CoreParams default is false, so override
+    override val useVector: Boolean = false, // TODO(Linux): set true + vLen=128 etc. so the DTS advertises "v"; XSTop's vector unit is internal either way
   useRVE: Boolean = false,
   useConditionalZero: Boolean = true,     // zicond
   mulDiv: Option[MulDivParams] = Some(MulDivParams()),
@@ -109,6 +109,9 @@ case class XiangShanTileParams(
   btb: Option[BTBParams] = None,
   trace: Boolean = false,                // trace interface tied off for now
   blockerCtrlAddr: Option[BigInt] = None,
+  // Bring-up: XSTop's internal PMA does not allow fetch from Chipyard's bootrom (0x10000),
+  // so boot directly at DRAM (program preloaded with LOADMEM=1). None = use Chipyard's reset vector.
+  resetVectorOverride: Option[BigInt] = Some(BigInt(0x80000000L)),
   clockSinkParams: ClockSinkParameters = ClockSinkParameters(),
   baseName: String = "xiangshan_tile",
   uniqueName: String = "xiangshan_tile_0"
@@ -223,7 +226,7 @@ class XiangShanTileModuleImp(outer: XiangShanTile) extends BaseTileModuleImp(out
   core.io_rtc_clock := clock
 
   // ---- Reset vector ----
-  core.io_riscv_rst_vec_0 := outer.resetVectorSinkNode.bundle
+  core.io_riscv_rst_vec_0 := outer.xiangshanParams.resetVectorOverride.map(_.U(48.W)).getOrElse(outer.resetVectorSinkNode.bundle)
 
   // ---- Interrupts (open issue #14) ----
   // io_extIntrs[i] -> XiangShan-internal PLIC source i+1. It needs raw
@@ -281,8 +284,59 @@ class XiangShanTileModuleImp(outer: XiangShanTile) extends BaseTileModuleImp(out
     p.rlast            := axi4.r.bits.last
   }
 
-  outer.memAXI4Node.out.foreach    { case (axi4, _) => connectXSMaster(axi4, core.memory) }
-  outer.periphAXI4Node.out.foreach { case (axi4, _) => connectXSMaster(axi4, core.peripheral) }
+  // ---- DEBUG PROBE (bring-up only; remove before FireSim/benchmarking) ----
+  // Logs every AXI request XSTop issues and edges of halt/critical_error.
+  // Output goes to stderr -> output/<config>/<binary>.out, lines tagged [XSPROBE].
+  val probeCycle = RegInit(0.U(64.W))
+  probeCycle := probeCycle + 1.U
+    //DEBUG: TODO: Remove
+  when(probeCycle === 1.U) { printf("[XSPROBE] rst_vec=%x\n", core.io_riscv_rst_vec_0) }
+
+  def probe(name: String, axi4: AXI4Bundle): Unit = {
+  when(axi4.ar.fire) {
+    printf(s"[XSPROBE] %d $name AR addr=%x len=%d size=%d id=%d\n",
+      probeCycle, axi4.ar.bits.addr, axi4.ar.bits.len, axi4.ar.bits.size, axi4.ar.bits.id)
+  }
+  when(axi4.aw.fire) {
+    printf(s"[XSPROBE] %d $name AW addr=%x len=%d size=%d id=%d\n",
+      probeCycle, axi4.aw.bits.addr, axi4.aw.bits.len, axi4.aw.bits.size, axi4.aw.bits.id)
+  }
+  when(axi4.w.fire) {
+    printf(s"[XSPROBE] %d $name W last=%d strb=%x data=%x\n",
+      probeCycle, axi4.w.bits.last, axi4.w.bits.strb, axi4.w.bits.data)
+  }
+  when(axi4.r.fire) {
+    printf(s"[XSPROBE] %d $name R id=%d last=%d resp=%d data=%x\n",
+      probeCycle, axi4.r.bits.id, axi4.r.bits.last, axi4.r.bits.resp, axi4.r.bits.data)
+  }
+  when(axi4.b.fire) {
+    printf(s"[XSPROBE] %d $name B id=%d resp=%d\n", probeCycle, axi4.b.bits.id, axi4.b.bits.resp)
+  }
+  // Stall detectors: a channel with valid high but no handshake for 1000 cycles.
+  def stall(ch: String, waiting: Bool): Unit = {
+    val n = RegInit(0.U(32.W))
+    n := Mux(waiting, n + 1.U, 0.U)
+    when(n === 1000.U) { printf(s"[XSPROBE] %d $name $ch STALLED 1000 cycles\n", probeCycle) }
+  }
+  stall("AR(valid,!ready)", axi4.ar.valid && !axi4.ar.ready)
+  stall("AW(valid,!ready)", axi4.aw.valid && !axi4.aw.ready)
+  stall("W(valid,!ready)",  axi4.w.valid  && !axi4.w.ready)
+  stall("R(valid,!ready)",  axi4.r.valid  && !axi4.r.ready)
+  stall("B(valid,!ready)",  axi4.b.valid  && !axi4.b.ready)
+}
+
+  outer.memAXI4Node.out.foreach    { case (axi4, _) => connectXSMaster(axi4, core.memory);     probe("mem", axi4) }
+  outer.periphAXI4Node.out.foreach { case (axi4, _) => connectXSMaster(axi4, core.peripheral); probe("periph", axi4) }
+
+  val haltPrev = RegNext(core.io_riscv_halt_0, false.B)
+  when(core.io_riscv_halt_0 =/= haltPrev) {
+    printf("[XSPROBE] %d halt(wfi) -> %d\n", probeCycle, core.io_riscv_halt_0)
+  }
+  val critPrev = RegNext(core.io_riscv_critical_error_0, false.B)
+  when(core.io_riscv_critical_error_0 && !critPrev) {
+    printf("[XSPROBE] %d CRITICAL ERROR asserted\n", probeCycle)
+  }
+  // ---- END DEBUG PROBE ----
 
   // ---- dma_* : unused for first bring-up (open issue #15), hold idle ----
   // XSTop is the AXI4 slave here, so these are XSTop inputs.
