@@ -1,0 +1,2 @@
+b9806e70cbbd2a6b13c130a80b8497d78afe63acb3c18ebfa0c66603a3dfdd8c  /cluster/home/gustavho/xiangshan-firesim-thesis/tests/xs-exit.elf
+3a4e14faf91238d244bb83fa93867b150f2c456565e45b41015dfb19ed88227e  /cluster/home/gustavho/xiangshan-firesim-thesis/tests/xs-hello.elf

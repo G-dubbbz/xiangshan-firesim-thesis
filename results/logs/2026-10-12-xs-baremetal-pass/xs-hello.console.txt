@@ -1,0 +1,4 @@
+%Warning: System has stack size 8192 kb which may be too small; suggest 'ulimit -c 29115' or larger
+[UART] UART0 is here (stdin/stdout).
+Hello XiangShan
+- /work/chipyard/sims/verilator/generated-src/chipyard.harness.TestHarness.XiangShanConfig/gen-collateral/TestDriver.v:158: Verilog $finish
