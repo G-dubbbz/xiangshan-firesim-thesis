@@ -15,7 +15,7 @@ mkdir -p "$OUT"
 run_one() {
   n=$1; elf=$B/build/xs/$n.elf
   ins=$(awk -v n="$n" '$1==n{sub("instret=","",$4); print $4}' "$B/spike-results.txt")
-  to=$((4*ins + 300000))
+  to=8000000
   start=$(date +%s)
   "$SIM" +permissive +dramsim +dramsim_ini_dir=/work/chipyard/generators/testchipip/src/main/resources/dramsim2_ini \
     +max-cycles=$to +init_write=0x08000000:0x0 +init_write=0x8000004:0x0 \
