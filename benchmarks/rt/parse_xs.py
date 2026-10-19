@@ -5,7 +5,7 @@ IPC = Spike instret (exact reference) / XiangShan mcycle. XiangShan's minstret l
 recent commits when read (see rt/calib: 1000 addi -> 974), so it is only checked
 against Spike within TOL."""
 import re, sys, pathlib
-TOL = 64
+TOL = 0   # exact: ROI_END fences before reading counters (rt/calib)
 B = pathlib.Path(__file__).resolve().parent.parent
 ref = {m[1]: int(m[2]) for m in re.finditer(r'^(\S+)\s+ROI cycles=\d+ instret=(\d+)',
                                             (B/'spike-results.txt').read_text(), re.M)}

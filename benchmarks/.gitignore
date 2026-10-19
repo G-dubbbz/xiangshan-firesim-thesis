@@ -1,1 +1,4 @@
 build/
+microbench/
+results/xs*/
+results/*Boom*/
