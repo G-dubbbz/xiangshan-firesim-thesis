@@ -19,7 +19,10 @@ mkdir -p "$OUT/obj" "$OUT/htif" "$OUT/xs"
 for n in $SUBSET; do
   d=$MB/$n; [ -f "$d/bench.c" ] || { echo "skip $n (no bench.c)"; continue; }
   opt=$(sed -n 's/^OPT=//p' "$d/Makefile" | tail -1); opt=${opt:--O3}
-  if [ -f "$d/rand_arr_args.txt" ]; then (cd "$d" && python3 ../rand_c_arr.py $(cat rand_arr_args.txt)); fi
+  if [ -f "$d/rand_arr_args.txt" ]; then
+    if [ -f "$HERE/randarr/$n.h" ]; then cp "$HERE/randarr/$n.h" "$d/randArr.h"   # frozen input data
+    elif [ ! -f "$d/randArr.h" ]; then (cd "$d" && python3 ../rand_c_arr.py $(cat rand_arr_args.txt)); fi
+  fi
   # 1) one shared object
   $CC $ARCH $opt -std=c99 -I"$HERE" -I"$MB" -I"$d" -c "$d/bench.c" -o "$OUT/obj/$n.o"
   # 2) link into each runtime
