@@ -9,7 +9,7 @@
 // 32-byte memory_* beats are not narrowed on the way to the L2.
 //
 // Known caveats (see docs/REPRODUCE.md and the bring-up log):
-//   - Chipyard's L2 is kept, so XiangShan's own internal 4 MB HuanCun L3 sits in
+//   - Chipyard's L2 is kept, so XiangShan's own internal 512 KB HuanCun L3 (MinimalConfig: 1024 sets x 8 ways x 1 bank; the 4 MB is the SoC.scala default it overrides) sits in
 //     front of it (double LLC). Fine for functional bring-up, NOT for benchmarks.
 //   - The tile boots at 0x80000000 (resetVectorOverride); run programs with LOADMEM=1.
 //   - tohost/fromhost live in an uncached scratchpad at 0x0800_0000 (see below and

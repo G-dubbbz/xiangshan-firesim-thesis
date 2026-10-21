@@ -448,7 +448,7 @@ The `.txt` names matter because `.gitignore` excludes `*.log`.
 - **Performance tunables:** `AXI4IdIndexer(4)` and `AXI4UserYanker(Some(8))` cap
   outstanding memory requests at 128. Validate this against XiangShan's real MLP
   before comparing with BOOM.
-- **Methodology:** XiangShan's internal 4 MB HuanCun L3 sits in front of
+- **Methodology:** XiangShan's internal 512 KB HuanCun L3 (MinimalConfig: 1024 sets x 8 ways x 1 bank; the 4 MB is the SoC.scala default it overrides) sits in front of
   Chipyard's L2 (double LLC). Resolve this before any BOOM comparison.
 
 ---
