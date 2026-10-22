@@ -58,3 +58,6 @@ work/
 
 # Backups made by scripts/xs_install_into_chipyard.sh
 *.bak-*
+._*
+.DS_Store
+tests/*.elf
