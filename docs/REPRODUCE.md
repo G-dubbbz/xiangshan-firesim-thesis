@@ -10,9 +10,7 @@ only. It covers:
 5. elaborating and building the Verilator simulator,
 6. running the bare-metal smoke test.
 
-**Known-good end state (2026-10-11, IDUN):** `XiangShanConfig` elaborates and the
-Verilator simulator builds. XiangShan boots from DRAM at `0x80000000` and prints
-`Hello XiangShan!` on Chipyard's UART.
+  **Known-good end state (2026-10-12, IDUN):** `XiangShanConfig` elaborates and the Verilator simulator builds. XiangShan boots from DRAM at `0x80000000`, prints `Hello XiangShan!` on Chipyard's UART, and ends the simulation itself by writing   `tohost`.
 
 **Scope:** this covers **direct Chipyard Verilator** (`sims/verilator`) only.
 FireSim metasimulation and U250 runs are not covered yet.
@@ -39,7 +37,7 @@ Conventions:
 | `scripts/xs_install_into_chipyard.sh` | Copies the tile, the config and the `build.sbt` change into a Chipyard checkout. |
 | `scripts/xs_stage_rtl.sh` | Copies XiangShan RTL into the generator, prefixes module names, regenerates `addResource` lines, and writes a provenance manifest. |
 | `scripts/xs_prefix_modules.py`, `scripts/xs_sync_resources.py` | Helpers used by `xs_stage_rtl.sh`. |
-| `tests/` (`hello.S`, `link.ld`, `Makefile`) | Bare-metal UART smoke test. |
+| `tests/` (`exit.S`, `hello.S`, `link.ld`, `Makefile`, `run-xs.sh`) | Bare-metal smoke tests (`tohost` exit, UART print) and the script that runs them. |
 
 ---
 
@@ -369,30 +367,40 @@ grep -nE '^\s*XSTop\s' $G/gen-collateral/XiangShanTile.sv   # one instance line
 
 ---
 
-## 6. Run the bare-metal smoke test
+## 6. Run the bare-metal smoke tests
 
 ```bash
-cd /thesis/tests && make            # builds xs-hello.elf, rejects LOAD segments below 0x80000000
-cd /work/chipyard/sims/verilator
-time make CONFIG=XiangShanConfig run-binary LOADMEM=1 TIMEOUT_CYCLES=1000000 \
-  BINARY=/thesis/tests/xs-hello.elf
-O=output/chipyard.harness.TestHarness.XiangShanConfig
+cd /thesis/tests && make            # builds xs-exit.elf and xs-hello.elf, rejects LOAD segments below 0x80000000
+bash /thesis/tests/run-xs.sh /thesis/tests/xs-exit.elf 50000     # seconds
+bash /thesis/tests/run-xs.sh /thesis/tests/xs-hello.elf          # ~30 min
+O=/work/chipyard/sims/verilator/output/chipyard.harness.TestHarness.XiangShanConfig
+tail -4 $O/xs-exit.log; grep -E 'periph|CRITICAL' $O/xs-exit.out | head
 grep -E 'rst_vec|periph|STALLED|ERROR|CRITICAL' $O/xs-hello.out | head -60   # [XSPROBE] debug probe
-grep -n 'UART' $O/xs-hello.log; cat $O/xs-hello.log
+cat $O/xs-hello.log
 ```
+
+`run-xs.sh` runs `make run-binary LOADMEM=1` and zeroes `tohost`/`fromhost` in the
+scratchpad with `+init_write` (§8). The second argument is the cycle limit
+(default 3M).
 
 Expected:
 
-- `[XSPROBE] rst_vec=000080000000`.
-- `mem AR addr=80000000 …`: instruction fetch from DRAM.
-- `periph AW addr=10020008` (UART `txctrl`), followed by alternating `periph AR`
-  (status poll) and `periph AW`/`W`, whose low bytes are the characters
-  (`48 65 6c 6c 6f …`). Every write gets a `periph B … resp=0`.
-- Console: `[UART] UART0 is here` followed by `Hello Xiang…`. The simulated UART
-  needs about 90k cycles per character, so 1M cycles shows roughly 11 characters.
-  Raise `TIMEOUT_CYCLES` to about 1.6M to see the whole string.
-- The run **ends with `*** FAILED *** (timeout)` / `TestDriver.v:147` `$stop`.
-  That is expected**: the test spins forever and does not signal an exit (see §8).
+- `xs-exit` ends by itself after a few seconds with `TestDriver.v:158: Verilog
+  $finish`. The probe shows the `tohost` store: `periph AW addr=08000000 size=3`,
+  `W data=…01`, `B resp=0`.
+- `xs-hello`:
+  - `[XSPROBE] rst_vec=000080000000`;
+  - `mem AR addr=80000000 …`: instruction fetch from DRAM;
+  - `periph AW addr=10020008` (UART `txctrl`), followed by alternating `periph AR`
+    (status poll) and `periph AW`/`W`, whose low bytes are the characters
+    (`48 65 6c 6c 6f …`). Every write gets a `periph B … resp=0`;
+  - console: `[UART] UART0 is here` followed by `Hello XiangShan!`, at about 90k
+    cycles per character;
+  - after printing, it writes `tohost = 1` and ends with `$finish`, like `xs-exit`.
+- A timeout (`*** FAILED *** (timeout)`, `TestDriver.v:147`) means the program
+  never wrote `tohost`. If a test traps, its handler writes `mcause`, `mepc` and
+  `mtval` to UART0's `ie` register (`0x10020010`), so they show up as three
+  `periph W` lines.
 - Speed: about 1,300 target cycles/s (1M cycles ≈ 12.5 min).
 
 Save the evidence in the repository:
@@ -415,12 +423,12 @@ The `.txt` names matter because `.gitignore` excludes `*.log`.
 | `NoSuchElementException: NOOP_HOME` at the end of `make verilog` | `xs-env/env.sh` not sourced | `cd /work/xs-env && source env.sh` |
 | `Ports cannot overlap: AddressSet(0x0, 0xffffffffffff) …` | A tile node claims the whole address space (old DMA slave node) | `dma_*` is tied idle in the current tile |
 | `IndexOutOfBoundsException: 0` in `TLXbar` | Tile master xbar not routed out | Current tile has `tlOtherMastersNode := tlMasterXbar.node; masterNode :=* tlOtherMastersNode` |
-| `OutOfMemoryError` with `source bits (18..22)` warnings | 14-bit AXI IDs blow up the per-ID adapters | Current tile uses `AXI4IdIndexer(4)` |
+| `OutOfMemoryError` with `source bits (16..22)` warnings | 14-bit AXI IDs blow up the per-ID adapters | Current tile uses `AXI4IdIndexer(4)` |
 | `BlackBox … must have a port named 'io'` | `XSTop` declared as `BlackBox` | It is an `ExtModule` now |
 | Verilator `%Error-PINNOTFOUND` in `InclusiveCacheBankScheduler.sv` | Module-name collisions (RTL not prefixed) | Re-run `xs_stage_rtl.sh`, clear jars and `generated-src` |
 | `CRITICAL ERROR asserted` around cycle 2100 and no AXI traffic | Reset vector `0x10000` (bootrom) is not executable in XiangShan's PMA | Keep `resetVectorOverride = 0x80000000`, run with `LOADMEM=1` |
 | Simulator segfaults within ~2 s | ELF `LOAD` segment below `0x80000000` (linked with `-Ttext` only) | Link with `tests/link.ld` (`tests/Makefile` checks this) |
-| riscv-tests time out without touching `tohost` | Store buffer holds the `tohost` store up to 2²⁰ cycles, and XiangShan's caches are not coherent with the harness | Known limitation, see §8 |
+| A program times out without touching `tohost` | `tohost` linked into DRAM: the store buffer holds the store up to 2²⁰ cycles, and XiangShan's caches are not coherent with the harness | Link `tohost`/`fromhost` into the scratchpad (`tests/link.ld`) and run with `tests/run-xs.sh` (§8) |
 | `unlink: … Read-only file system` after a run | Binary lives in the read-only toolchain dir | Copy the binary to `/work` or `/thesis` first |
 | Commands fail on a new node | Sandbox is node-local | Redo §2.3–2.4; everything in `/work` persists |
 
@@ -428,28 +436,27 @@ The `.txt` names matter because `.gitignore` excludes `*.log`.
 
 ## 8. Known limitations and open issues
 
-- **Test termination:** `tohost` doesn't work yet.
+- **Test termination (solved 2026-10-12):** `tohost` in DRAM can't work with this
+  XiangShan build:
   - XiangShan's store buffer evicts idle entries only after `EvictCycles = 1 << 20`
-    cycles (`Sbuffer.scala:39`).
+    cycles (`Sbuffer.scala:39`);
   - XiangShan's write-back L1/L2/L3 sit inside `XSTop`, behind non-coherent AXI,
-    so the harness never sees `tohost` in DRAM.
-  - Candidate fix: an uncached Chipyard scratchpad below `0x1000_0000`, with
-    `tohost` linked there and a `fence` before the final store.
-- **Boot path:** Chipyard's bootrom and TSI loading are bypassed. Moving back to
-  them needs a XiangShan PMA change that makes `0x10000` executable, plus a fix for
-  the bootrom's `wfi`/`msip` wake-up (XiangShan only sees its internal CLINT).
+    so the harness never sees `tohost` in DRAM;
+  - `cbo.flush` traps as illegal, because CMO needs the CHI build (`EnableCHI`).
+
+  Fix: `XiangShanConfig` adds a 64 KiB scratchpad on the system bus at   `0x0800_0000`, which XiangShan's PMA treats as uncached. `tohost`/`fromhost` are   absolute linker symbols there (`tests/link.ld`, `benchmarks/rt/link_xs.ld`), not a loadable section, because `+loadmem` loads every segment relative to the DRAM base. The scratchpad starts random in simulation, so `tests/run-xs.sh` zeroes both words with `+init_write`. Standard riscv-tests put `tohost` in DRAM and still need relinking against this layout.
+- **Boot path:** Chipyard's bootrom and TSI loading are bypassed. Moving back to them needs a XiangShan PMA change that makes `0x10000` executable, plus a fix for the bootrom's `wfi`/`msip` wake-up (XiangShan only sees its internal CLINT).
 - **Tied off:**
   - `dma_*`: issue #15;
   - external interrupts (`io_extIntrs = 0`): #14;
   - JTAG/debug, and `io_rtc_clock = clock`: #12;
   - vector in the DTS (`useVector = false`).
-- **Debug probe:** the `[XSPROBE]` printfs are compiled into the tile. Remove them
-  or put them behind a parameter before FireSim or any benchmarking.
-- **Performance tunables:** `AXI4IdIndexer(4)` and `AXI4UserYanker(Some(8))` cap
-  outstanding memory requests at 128. Validate this against XiangShan's real MLP
-  before comparing with BOOM.
-- **Methodology:** XiangShan's internal 512 KB HuanCun L3 (MinimalConfig: 1024 sets x 8 ways x 1 bank; the 4 MB is the SoC.scala default it overrides) sits in front of
-  Chipyard's L2 (double LLC). Resolve this before any BOOM comparison.
+  - **Debug probe:** the `[XSPROBE]` printfs are compiled into the tile. They only cost simulation wall-clock time, not target cycles. The microbenchmarks use them to report results: `benchmarks/rt/rt_xs.c` writes the counters to UART0 `ie`, and parse_xs.py` reads them from the `periph W` lines. Put the probe behind a parameter, with another way to report results, before FireSim.
+- **Performance tunables:** `AXI4IdIndexer(4)` and `AXI4UserYanker(Some(8))` cap outstanding memory requests at 128 reads and 128 writes (8 per compressed ID and direction). Validate this against XiangShan's real MLP before comparing with BOOM.
+- **TLMonitor 15-bit warnings (`XiangShanConfig` only):** the cbus/pbus devices (CLINT, PLIC, UART, bootrom, debug module, L2 control, tile clock/reset registers) see 15-bit source IDs, so their TLMonitors skip A=>D flight tracking. The BOOM configs show no such warnings.
+  - Likely cause (not verified): the `memory_*` `AXI4ToTL` client (256 sources) is visible on cbus/pbus, and the fragmenter on that path adds bits.
+  - Possible fix: a `TLFilter` on the `memory_*` chain that limits its visibility to DRAM. Harmless for the microbenchmark results.
+- **Methodology:** XiangShan's internal 512 KB HuanCun L3 (MinimalConfig: 1024 sets x 8 ways x 1 bank; the 4 MB is the SoC.scala default it overrides) sits in front of Chipyard's L2 (double LLC). Resolve this before any BOOM comparison.
 
 ---
 
