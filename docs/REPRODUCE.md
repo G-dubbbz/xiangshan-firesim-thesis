@@ -8,9 +8,12 @@ only. It covers:
 3. generating XiangShan RTL,
 4. creating the Chipyard checkout and installing the XiangShan tile,
 5. elaborating and building the Verilator simulator,
-6. running the bare-metal smoke test.
+6. running the bare-metal smoke tests.
 
-  **Known-good end state (2026-10-12, IDUN):** `XiangShanConfig` elaborates and the Verilator simulator builds. XiangShan boots from DRAM at `0x80000000`, prints `Hello XiangShan!` on Chipyard's UART, and ends the simulation itself by writing   `tohost`.
+**Known-good end state (2026-10-12, IDUN):** `XiangShanConfig` elaborates and the
+Verilator simulator builds. XiangShan boots from DRAM at `0x80000000`, prints
+`Hello XiangShan!` on Chipyard's UART, and ends the simulation itself by writing
+`tohost`.
 
 **Scope:** this covers **direct Chipyard Verilator** (`sims/verilator`) only.
 FireSim metasimulation and U250 runs are not covered yet.
@@ -19,8 +22,14 @@ Conventions:
 
 - *host shell* means the IDUN compute node outside the container.
 - *container* means inside the Apptainer sandbox.
-- Paths in the container: `/work` is `~/xiangshan-firesim-thesis/work` on the host,
-  and `/thesis` is this repository (`~/xiangshan-firesim-thesis`).
+- `/work` is the persistent workspace. On IDUN it is
+  `~/xiangshan-firesim-thesis/work` on the host, bound to `/work` in the container.
+- `$THESIS` is this repository. Its path depends on where you run:
+  - IDUN (Apptainer): your home directory is mounted automatically, so the
+    repository is at `~/xiangshan-firesim-thesis` in both the host shell and the
+    container. Set `export THESIS="$HOME/xiangshan-firesim-thesis"` (§2.4 does this).
+  - Docker on the Mac: mount the repository at `/thesis` and set
+    `export THESIS=/thesis`.
 
 ---
 
@@ -30,7 +39,7 @@ Conventions:
 |---|---|
 | `chipyard-dockerfiles/Dockerfile`, `chipyard-docker-entrypoint.sh` | Container image: Chipyard `0acc1e1` at `/opt/chipyard-dist`, Conda env, RISC-V toolchain, Verilator, FireSim metasim, Mill (for XiangShan). |
 | `environment/` | Pinned Chipyard commit, submodule snapshot, image identity. |
-| `external/xiangshan/baseline.txt` | XiangShan commit and submodule snapshot (see the commit warning in §3). |
+| `external/xiangshan/baseline.txt` | XiangShan commit, status and submodule snapshot of the checkout the RTL was generated from (§3.1). |
 | `generators/xiangshan/` | The Chipyard tile (Scala). The Verilog (`vsrc/`) is regenerated, not committed. |
 | `configs/XiangShanConfigs.scala` | Top-level `chipyard.XiangShanConfig`. |
 | `patches/chipyard/xiangshan-build-sbt.patch` | Registers the `xiangshan` sbt project in Chipyard's `build.sbt`. |
@@ -125,7 +134,6 @@ Don't use a SIF: on IDUN, packing it produced an invalid ~37 KB file.
 ```bash
 apptainer shell \
   --bind "$HOME/xiangshan-firesim-thesis/work:/work" \
-  --bind "$HOME/xiangshan-firesim-thesis:/thesis" \
   "$SANDBOX_TMP"
 ```
 
@@ -135,17 +143,16 @@ Apptainer does not run the Docker entrypoint, so source it yourself:
 source /usr/local/bin/chipyard-docker-entrypoint.sh
 export LC_ALL=C.UTF-8     # silences perl locale warnings
 set +H                    # stops bash history expansion from mangling '!' in pasted text
+export THESIS="$HOME/xiangshan-firesim-thesis"   # this repository (home is auto-mounted)
 test -f /.singularity.d/Singularity && echo "inside container"
 echo "RISCV=$RISCV"; verilator --version; riscv64-unknown-elf-gcc --version | head -1
 ```
 
 Expected: `RISCV=/opt/conda/envs/chipyard/riscv-tools`, Verilator 5.022, gcc 13.2.0.
 
-The `/thesis` bind is new and was not part of the 2026-10 runs. If Apptainer
-refuses to create that mount point, leave it out and run the `scripts/` from the
-host shell instead. They only need bash, python3 and git. Set
-`CHIPYARD_DIR=~/xiangshan-firesim-thesis/work/chipyard` and
-`XS_HOME=~/xiangshan-firesim-thesis/work/xs-env/XiangShan`.
+The repository needs no bind of its own: Apptainer mounts your home directory, so
+`$THESIS` points to the same checkout inside and outside the container. Run
+`git pull`/`git push` in the host shell, because the container has no SSH.
 
 On this system `which` rejects some invocations (`Illegal option --`).
 Use `command -v <tool>` instead.
@@ -160,7 +167,7 @@ The validated workspace is `/work/xs-env` (OpenXiangShan `xs-env`), pinned to:
 
 ```text
 xs-env:    fe437b5719533ea52295e192bae0a3b40ee203f7
-XiangShan: 16ae9ddcda54fc9a2fddffad73174cf793ac7814   (see warning below)
+XiangShan: 16ae9ddcda54fc9a2fddffad73174cf793ac7814   (detached HEAD; see provenance note below)
 NEMU:      a48a11f208ff81ad765591d83271d1b339fb3861   (only needed for XiangShan's own emu/difftest)
 nexus-am:  086a238062fdfb3281b745a537b361983d0154b5   (same)
 ```
@@ -181,21 +188,31 @@ nexus-am:  086a238062fdfb3281b745a537b361983d0154b5   (same)
 > make init        # initializes XiangShan's submodules (a make-init.log exists locally)
 > ```
 
-> **⚠ Commit discrepancy to resolve.** `external/xiangshan/baseline.txt` records
-> XiangShan `18d7a15f…` on `kunminghu-v3`. However, the IDUN runbook and the
-> generated device tree (`model = "xiangshan,Kunminghu-dev- 16ae9ddc-DIRTY …"`)
-> show that the RTL actually used came from `16ae9ddc…` **with uncommitted local
-> changes**. Before trusting a rebuild, run this on IDUN:
+> **Provenance of the RTL used for the results (verified 2026-11-07).** The RTL was
+> generated on 2026-09-21 from XiangShan `16ae9ddc` (detached HEAD), the commit
+> that also appears in the generated device tree
+> (`model = "xiangshan,Kunminghu-dev- 16ae9ddc-DIRTY …"`). No tracked source file
+> is changed. The `DIRTY` flag comes from two things that do not affect the RTL:
+>
+> - `ready-to-run/riscv64-nemu-interpreter-so` has been replaced by a symlink
+>   (type change in `git status`); it is the NEMU library used only by XiangShan's
+>   own difftest;
+> - an untracked `generators/xiangshan/` directory (apparently a misplaced copy of
+>   the tile sources), which `build.sc` does not reference.
+>
+> With the `XS_` prefixes removed, the staged `XSTop.sv` in the Chipyard generator
+> is byte-identical to `build/rtl/XSTop.sv`. The full state, including submodules,
+> is in `external/xiangshan/baseline.txt`; an earlier version of that file wrongly
+> recorded `18d7a15f` on `kunminghu-v3`. No `xs-rtl-manifest.txt` exists for this
+> staging. Future runs of `scripts/xs_stage_rtl.sh` write one automatically (§4.3).
+>
+> To check a checkout against this record:
 >
 > ```bash
-> git -C /work/xs-env/XiangShan rev-parse HEAD
-> git -C /work/xs-env/XiangShan status --short
-> git -C /work/xs-env/XiangShan diff > /thesis/external/xiangshan/xiangshan-local.diff
-> git -C /work/xs-env/XiangShan submodule status --recursive > /thesis/external/xiangshan/submodules-idun.txt
+> git -C /work/xs-env/XiangShan rev-parse HEAD      # 16ae9ddcda54fc9a2fddffad73174cf793ac7814
+> git -C /work/xs-env/XiangShan status --short      # only " m ready-to-run" and "?? generators/"
+> git -C /work/xs-env/XiangShan diff --stat         # no tracked source changes
 > ```
->
-> Then update `baseline.txt`. `scripts/xs_stage_rtl.sh` records the commit and the
-> dirty state automatically from now on (§4.3).
 
 ### 3.2 Generate `XSTop` RTL
 
@@ -250,7 +267,7 @@ make CONFIG=RocketConfig run-asm-tests`), as recorded in
 ### 4.2 Install the tile, config and `build.sbt` change
 
 ```bash
-CHIPYARD_DIR=/work/chipyard /thesis/scripts/xs_install_into_chipyard.sh
+CHIPYARD_DIR=/work/chipyard $THESIS/scripts/xs_install_into_chipyard.sh
 ```
 
 This copies:
@@ -280,7 +297,7 @@ changes back before re-running.
 ### 4.3 Stage the RTL
 
 ```bash
-CHIPYARD_DIR=/work/chipyard XS_HOME=/work/xs-env/XiangShan /thesis/scripts/xs_stage_rtl.sh
+CHIPYARD_DIR=/work/chipyard XS_HOME=/work/xs-env/XiangShan $THESIS/scripts/xs_stage_rtl.sh
 ```
 
 This:
@@ -297,7 +314,7 @@ Expected output (2026-10): `1581 files, 1580 modules defined, renaming 1579`,
 Copy the manifest into the repository with your results:
 
 ```bash
-cp /work/chipyard/generators/xiangshan/xs-rtl-manifest.txt /thesis/external/xiangshan/
+cp /work/chipyard/generators/xiangshan/xs-rtl-manifest.txt $THESIS/external/xiangshan/
 ```
 
 **Why prefixing is required:** Chipyard writes firtool output and blackbox
@@ -346,7 +363,7 @@ Harmless noise you will also see:
 - `printf-encoded verification operation(s)` from firtool;
 - `common.mk:288 … Error 1 (ignored)`;
 - `Empty *.mems.conf`;
-- `TLMonitor … source bits (15) > 14`.
+- `TLMonitor … source bits (15) > 14` (see §8).
 
 Collision check. The expected output is exactly one line: `XSTop`.
 
@@ -370,9 +387,9 @@ grep -nE '^\s*XSTop\s' $G/gen-collateral/XiangShanTile.sv   # one instance line
 ## 6. Run the bare-metal smoke tests
 
 ```bash
-cd /thesis/tests && make            # builds xs-exit.elf and xs-hello.elf, rejects LOAD segments below 0x80000000
-bash /thesis/tests/run-xs.sh /thesis/tests/xs-exit.elf 50000     # seconds
-bash /thesis/tests/run-xs.sh /thesis/tests/xs-hello.elf          # ~30 min
+cd $THESIS/tests && make            # builds xs-exit.elf and xs-hello.elf, rejects LOAD segments below 0x80000000
+bash $THESIS/tests/run-xs.sh $THESIS/tests/xs-exit.elf 50000     # seconds
+bash $THESIS/tests/run-xs.sh $THESIS/tests/xs-hello.elf          # ~30 min
 O=/work/chipyard/sims/verilator/output/chipyard.harness.TestHarness.XiangShanConfig
 tail -4 $O/xs-exit.log; grep -E 'periph|CRITICAL' $O/xs-exit.out | head
 grep -E 'rst_vec|periph|STALLED|ERROR|CRITICAL' $O/xs-hello.out | head -60   # [XSPROBE] debug probe
@@ -406,9 +423,9 @@ Expected:
 Save the evidence in the repository:
 
 ```bash
-mkdir -p /thesis/results/logs/$(date +%Y-%m-%d)-xs-hello
-cp $O/xs-hello.out /thesis/results/logs/$(date +%Y-%m-%d)-xs-hello/xs-hello.out.txt
-cp $O/xs-hello.log /thesis/results/logs/$(date +%Y-%m-%d)-xs-hello/xs-hello.console.txt
+mkdir -p $THESIS/results/logs/$(date +%Y-%m-%d)-xs-hello
+cp $O/xs-hello.out $THESIS/results/logs/$(date +%Y-%m-%d)-xs-hello/xs-hello.out.txt
+cp $O/xs-hello.log $THESIS/results/logs/$(date +%Y-%m-%d)-xs-hello/xs-hello.console.txt
 ```
 
 The `.txt` names matter because `.gitignore` excludes `*.log`.
@@ -429,7 +446,7 @@ The `.txt` names matter because `.gitignore` excludes `*.log`.
 | `CRITICAL ERROR asserted` around cycle 2100 and no AXI traffic | Reset vector `0x10000` (bootrom) is not executable in XiangShan's PMA | Keep `resetVectorOverride = 0x80000000`, run with `LOADMEM=1` |
 | Simulator segfaults within ~2 s | ELF `LOAD` segment below `0x80000000` (linked with `-Ttext` only) | Link with `tests/link.ld` (`tests/Makefile` checks this) |
 | A program times out without touching `tohost` | `tohost` linked into DRAM: the store buffer holds the store up to 2²⁰ cycles, and XiangShan's caches are not coherent with the harness | Link `tohost`/`fromhost` into the scratchpad (`tests/link.ld`) and run with `tests/run-xs.sh` (§8) |
-| `unlink: … Read-only file system` after a run | Binary lives in the read-only toolchain dir | Copy the binary to `/work` or `/thesis` first |
+| `unlink: … Read-only file system` after a run | Binary lives in the read-only toolchain dir | Copy the binary to `/work` or `$THESIS` first |
 | Commands fail on a new node | Sandbox is node-local | Redo §2.3–2.4; everything in `/work` persists |
 
 ---
@@ -444,25 +461,54 @@ The `.txt` names matter because `.gitignore` excludes `*.log`.
     so the harness never sees `tohost` in DRAM;
   - `cbo.flush` traps as illegal, because CMO needs the CHI build (`EnableCHI`).
 
-  Fix: `XiangShanConfig` adds a 64 KiB scratchpad on the system bus at   `0x0800_0000`, which XiangShan's PMA treats as uncached. `tohost`/`fromhost` are   absolute linker symbols there (`tests/link.ld`, `benchmarks/rt/link_xs.ld`), not a loadable section, because `+loadmem` loads every segment relative to the DRAM base. The scratchpad starts random in simulation, so `tests/run-xs.sh` zeroes both words with `+init_write`. Standard riscv-tests put `tohost` in DRAM and still need relinking against this layout.
-- **Boot path:** Chipyard's bootrom and TSI loading are bypassed. Moving back to them needs a XiangShan PMA change that makes `0x10000` executable, plus a fix for the bootrom's `wfi`/`msip` wake-up (XiangShan only sees its internal CLINT).
+  Fix: `XiangShanConfig` adds a 64 KiB scratchpad on the system bus at
+  `0x0800_0000`, which XiangShan's PMA treats as uncached. `tohost`/`fromhost` are
+  absolute linker symbols there (`tests/link.ld`, `benchmarks/rt/link_xs.ld`), not a
+  loadable section, because `+loadmem` loads every segment relative to the DRAM
+  base. The scratchpad starts random in simulation, so `tests/run-xs.sh` zeroes
+  both words with `+init_write`. Standard riscv-tests put `tohost` in DRAM and
+  still need relinking against this layout.
+- **Boot path:** Chipyard's bootrom and TSI loading are bypassed. Moving back to
+  them needs a XiangShan PMA change that makes `0x10000` executable, plus a fix for
+  the bootrom's `wfi`/`msip` wake-up (XiangShan only sees its internal CLINT).
 - **Tied off:**
   - `dma_*`: issue #15;
   - external interrupts (`io_extIntrs = 0`): #14;
   - JTAG/debug, and `io_rtc_clock = clock`: #12;
   - vector in the DTS (`useVector = false`).
-  - **Debug probe:** the `[XSPROBE]` printfs are compiled into the tile. They only cost simulation wall-clock time, not target cycles. The microbenchmarks use them to report results: `benchmarks/rt/rt_xs.c` writes the counters to UART0 `ie`, and parse_xs.py` reads them from the `periph W` lines. Put the probe behind a parameter, with another way to report results, before FireSim.
-- **Performance tunables:** `AXI4IdIndexer(4)` and `AXI4UserYanker(Some(8))` cap outstanding memory requests at 128 reads and 128 writes (8 per compressed ID and direction). Validate this against XiangShan's real MLP before comparing with BOOM.
-- **TLMonitor 15-bit warnings (`XiangShanConfig` only):** the cbus/pbus devices (CLINT, PLIC, UART, bootrom, debug module, L2 control, tile clock/reset registers) see 15-bit source IDs, so their TLMonitors skip A=>D flight tracking. The BOOM configs show no such warnings.
-  - Likely cause (not verified): the `memory_*` `AXI4ToTL` client (256 sources) is visible on cbus/pbus, and the fragmenter on that path adds bits.
-  - Possible fix: a `TLFilter` on the `memory_*` chain that limits its visibility to DRAM. Harmless for the microbenchmark results.
-- **Methodology:** XiangShan's internal 512 KB HuanCun L3 (MinimalConfig: 1024 sets x 8 ways x 1 bank; the 4 MB is the SoC.scala default it overrides) sits in front of Chipyard's L2 (double LLC). Resolve this before any BOOM comparison.
+- **Debug probe:** the `[XSPROBE]` printfs are compiled into the tile. They only
+  cost simulation wall-clock time, not target cycles. The microbenchmarks use them
+  to report results: `benchmarks/rt/rt_xs.c` writes the counters to UART0 `ie`, and
+  `parse_xs.py` reads them from the `periph W` lines. Put the probe behind a
+  parameter, with another way to report results, before FireSim.
+- **Performance tunables:** `AXI4IdIndexer(4)` and `AXI4UserYanker(Some(8))` cap
+  outstanding memory requests at 128 reads and 128 writes (8 per compressed ID and
+  direction). Not yet validated against XiangShan's real MLP; the current BOOM
+  comparison uses these values.
+- **TLMonitor 15-bit warnings (`XiangShanConfig` only):** the cbus/pbus devices
+  (CLINT, PLIC, UART, bootrom, debug module, L2 control, tile clock/reset
+  registers) see 15-bit source IDs, so their TLMonitors skip A=>D flight
+  tracking. The BOOM configs show no such warnings.
+  - Likely cause (not verified): the `memory_*` `AXI4ToTL` client (256 sources)
+    is visible on cbus/pbus, and the fragmenter on that path adds bits.
+  - Possible fix: a `TLFilter` on the `memory_*` chain that limits its
+    visibility to DRAM. Harmless for the microbenchmark results.
+- **Methodology (double LLC):** XiangShan's internal 512 KB HuanCun L3
+  (MinimalConfig: 1024 sets × 8 ways × 1 bank; the 4 MB in `SoC.scala` is the
+  default it overrides) sits in front of Chipyard's 512 KB L2, so XiangShan has a
+  cache level that BOOM doesn't.
+  - **Decision for the project thesis (agreed with supervisor):** keep this
+    configuration. The control-flow and compute benchmarks are reported as the
+    core comparison; the memory benchmarks are reported separately, with this
+    caveat.
+  - Future work: remove Chipyard's L2 for XiangShan (proposed
+    `XiangShanNoL2Config`: `WithBroadcastManager` on top of `XiangShanConfig`).
 
 ---
 
 ## 9. Reproducibility checklist (record per experiment)
 
-- [ ] Thesis repo commit (`git -C /thesis rev-parse HEAD`)
+- [ ] Thesis repo commit (`git -C $THESIS rev-parse HEAD`)
 - [ ] Image ID (`environment/chipyard-firesim-metasim-image.txt`) and tar sha256
 - [ ] Chipyard commit, plus `git -C /work/chipyard status --short`. The expected
       changes are only `build.sbt`, the new config file, `generators/xiangshan/`
