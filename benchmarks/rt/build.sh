@@ -14,6 +14,12 @@
 # Random input data: benchmarks with rand_arr_args.txt get their data from rt/randarr/<B>.h.
 # If no frozen copy exists yet, the data is generated once and frozen into rt/randarr/
 # (commit the new file and SHA256SUMS), so every later build and every core uses it.
+#
+# Heap: libgloss-htif reserves only 128 KB of heap (htif.ld: PROVIDE(__heap_size = 128K)),
+# and its _sbrk fails beyond that. MM and MM_st malloc a 32,769-node list of 176-byte nodes
+# (~6 MB), so their HTIF link gets a 16 MB heap via --defsym (this works because the specs
+# pass the script with -dT, which ld processes after the command line; checked below).
+# All other HTIF binaries keep the default layout. The XiangShan runtime's _sbrk has no limit.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 MB=$HERE/../microbench
@@ -24,6 +30,8 @@ NM=riscv64-unknown-elf-nm
 READELF=riscv64-unknown-elf-readelf
 ARCH="-march=rv64gc -mabi=lp64d -mcmodel=medany -mno-relax"
 SUBSET23="CCa CCe CCh CCh_st CCl CCm CF1 CRf CS1 CS3 ED1 EM1 EM5 EI EF DP1f DPcvt MC MCS MI MIP ML2_BW_ldst STL2b"
+BIG_HEAP="MM MM_st"      # benchmarks whose HTIF link needs more than the default 128 KB heap
+HEAP_SIZE=0x1000000      # 16 MB
 if [ -n "${BENCHES:-}" ]; then SUBSET=$BENCHES
 elif [ "${SET:-all}" = 23 ]; then SUBSET=$SUBSET23
 else SUBSET=$(cd "$MB" && for d in */; do [ -f "$d/bench.c" ] && echo "${d%/}"; done); fi
@@ -33,8 +41,9 @@ mkdir -p "$OUT/obj" "$OUT/htif" "$OUT/xs"
 ops() { $OBJDUMP -d --no-show-raw-insn "$1" | awk -v h="<$2>:" '$2==h{f=1;next} f&&/^$/{exit} f{print $2}'; }
 
 build_one() {
-  local n=$1 d=$MB/$1 opt fn
+  local n=$1 d=$MB/$1 opt fn heap="" e h
   [ -f "$d/bench.c" ] || { echo "skip $n (no bench.c)"; return 0; }
+  case " $BIG_HEAP " in *" $n "*) heap="-Wl,--defsym=__heap_size=$HEAP_SIZE" ;; esac
   opt=$(sed -n 's/^OPT=//p' "$d/Makefile" | tail -1); opt=${opt:--O3}
   if [ -f "$d/rand_arr_args.txt" ]; then
     if [ -f "$HERE/randarr/$n.h" ]; then
@@ -49,8 +58,15 @@ build_one() {
   # 1) one shared object
   $CC $ARCH $opt -std=c99 -I"$HERE" -I"$MB" -I"$d" -c "$d/bench.c" -o "$OUT/obj/$n.o" || return 1
   # 2) link into each runtime
-  $CC $ARCH -static -Wl,--no-relax -specs=htif_nano.specs "$HERE/rt_htif.c" "$OUT/obj/$n.o" -lm \
+  $CC $ARCH -static -Wl,--no-relax $heap -specs=htif_nano.specs "$HERE/rt_htif.c" "$OUT/obj/$n.o" -lm \
       -o "$OUT/htif/$n.elf" || return 1
+  if [ -n "$heap" ]; then   # the larger heap must really be in the ELF
+    e=$($NM "$OUT/htif/$n.elf" | awk '$3=="_end"{print $1}'); h=$($NM "$OUT/htif/$n.elf" | awk '$3=="__heap_end"{print $1}')
+    if [ -z "$e" ] || [ -z "$h" ] || [ $(( 0x$h - 0x$e )) -lt $(( HEAP_SIZE )) ]; then
+      echo "ERROR: $n htif heap is $(( 0x${h:-0} - 0x${e:-0} )) bytes, expected >= $(( HEAP_SIZE ))" >&2; return 1
+    fi
+    echo "  $n: htif heap $(( 0x$h - 0x$e )) bytes"
+  fi
   $CC $ARCH -static -Wl,--no-relax -nostartfiles -T "$HERE/link_xs.ld" -specs=nano.specs -Wl,--gc-sections \
       "$HERE/crt_xs.S" "$HERE/rt_xs.c" "$OUT/obj/$n.o" -lm -o "$OUT/xs/$n.elf" || return 1
   # 3) checks: xs image inside DRAM; every function of the benchmark identical in both ELFs
