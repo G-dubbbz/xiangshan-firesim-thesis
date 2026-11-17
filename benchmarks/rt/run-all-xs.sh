@@ -31,8 +31,11 @@ mkdir -p "$OUT"
   ls -l "$SIM"; } >> "$OUT/meta.txt"
 
 spike_instret() { awk -v n="$1" '$1==n{sub("instret=","",$4); print $4}' "$REF"; }
-passed() {   # same pass rule as parse_xs.py / compare.py
-  [ -f "$OUT/$1.log" ] && grep -q 'TestDriver.v:158' "$OUT/$1.log" && ! grep -q FAILED "$OUT/$1.log"
+passed() {   # normal end in the log AND the ROI report (tag 524f4931 "ROI1") in the probe output.
+  # The log alone is not enough: a simulation stopped with Ctrl-C also ends with
+  # TestDriver.v:158 $finish, because the host side shuts down cleanly, but has no ROI report.
+  [ -f "$OUT/$1.log" ] && grep -q 'TestDriver.v:158' "$OUT/$1.log" && ! grep -q FAILED "$OUT/$1.log" &&
+    grep -qE 'periph W .*data=[0-9a-f]{8}524f4931' "$OUT/$1.out" 2>/dev/null
 }
 cost() {
   local ins bss
