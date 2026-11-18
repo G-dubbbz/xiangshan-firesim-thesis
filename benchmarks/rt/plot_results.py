@@ -2,9 +2,12 @@
 """Plot microbenchmark results from results/comparison.csv (written by rt/compare.py).
 
 Figures (PDF for the thesis, PNG for quick viewing), written to results/plots/:
-  normalized_ipc.pdf  IPC of every core normalized to the baseline core (default:
-                      Medium BOOM = 1 for every benchmark), as bars from 0, one panel per
-                      category, each panel ending with that category's mean.
+  normalized_ipc_<category>.pdf
+                      one figure per category (control_flow, compute, memory): IPC of every
+                      core normalized to the baseline core (default: Medium BOOM = 1 for every
+                      benchmark), as bars from 0, ending with that category's mean. No title
+                      inside the figure: the LaTeX caption names the category.
+  normalized_ipc.pdf  the same, all categories in one figure (e.g. for an appendix).
   ipc.pdf             absolute IPC per benchmark and core, same panels, no means.
   summary.txt         per-category means (harmonic and arithmetic) and the normalized
                       IPC of every benchmark, as plain text.
@@ -14,6 +17,7 @@ Usage:
                              [--baseline MediumBoomV3Config]
                              [--order MediumBoomV3Config,XiangShan,MegaBoomV3Config]
                              [--mean harmonic|arithmetic] [--ymax 3] [--caveat-memory TEXT]
+                             [--width 7.0] [--hide-baseline]
 
 Core order: bars, legend and tables run left to right in --order (default Medium BOOM,
 XiangShan, Mega BOOM); cores in the CSV that are not listed follow in CSV order.
@@ -34,6 +38,12 @@ C* = control flow; D* (data parallel) and E* (execution) = compute; M* and ST* =
 
 --ymax: bars above this value are cut at the top with a break mark and their value
 printed above them, so differences around 1 stay readable. --ymax 0 = no cut.
+--width: width in inches of the per-category figures (7.0 = full text width of the
+two-column layout; use about 3.4 for a single column).
+--same-scale: one y scale for all per-category figures (default: each figure its own,
+rounded up to 0.5; bars are cut only where a value exceeds --ymax).
+--hide-baseline: leave out the baseline bars (all exactly 1) and show the baseline only as
+the line at 1, which makes the figures less busy.
 
 Cells marked FAIL or INSTRET-... in the CSV are left out of the plots and listed in
 summary.txt. A benchmark without a baseline result is left out of the normalized plot.
@@ -44,6 +54,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
+from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 DEFAULT_ORDER = ['MediumBoomV3Config', 'XiangShan', 'MegaBoomV3Config']
@@ -169,20 +180,21 @@ def make_axes(rows, extra, row_height):
     return fig, axes
 
 
-def setup_panel(ax, title, labels, mean_label, first_in_row):
+def setup_panel(ax, title, labels, mean_label, first_in_row, rot=60):
     n = len(labels)
     xm = n - 0.5 + MEAN_GAP + MEAN_W / 2
     ticks = list(range(n)) + ([xm] if mean_label else [])
     ax.set_xticks(ticks)
     ax.set_xticklabels([b.replace('_', '​_') for b in labels] + ([mean_label] if mean_label else []),
-                       rotation=60, ha='right', rotation_mode='anchor')
+                       rotation=rot, ha='right', rotation_mode='anchor')
     if mean_label:
         lab = ax.get_xticklabels()[-1]   # horizontal, two lines: fits the wide mean group
         lab.set_rotation(0); lab.set_ha('center'); lab.set_rotation_mode('default')
         lab.set_fontweight('bold'); lab.set_color(INK); lab.set_fontsize(7)
         ax.axvspan(n - 0.5 + MEAN_GAP, n - 0.5 + MEAN_GAP + MEAN_W, color=MEANBG, zorder=0, linewidth=0)
     ax.set_xlim(-0.6, (n - 0.5 + MEAN_GAP + MEAN_W) if mean_label else (n - 0.4))
-    ax.set_title(title, color=INK, pad=4)
+    if title:
+        ax.set_title(title, color=INK, pad=4)
     ax.grid(axis='y', color=GRID, linewidth=0.6, zorder=0)
     ax.tick_params(axis='x', length=0)
     if not first_in_row:
@@ -218,15 +230,17 @@ def bars(ax, x0, values, cores, plot_cores, bw, cap):
                     fontsize=6.5, color=INK, zorder=4, clip_on=False)
 
 
-def legend(fig, cores, plot_cores, extra_label=None):
+def legend(fig, cores, plot_cores, extra_label=None, base_line_label=None):
     handles = [Patch(color=style(c, cores)[0], label=style(c, cores)[1]) for c in plot_cores]
     if extra_label:
         handles[0].set_label(extra_label)
+    if base_line_label:   # baseline drawn only as the line at 1
+        handles.insert(0, Line2D([], [], color=INK2, linewidth=0.9, label=base_line_label))
     fig.legend(handles=handles, loc='lower center', ncol=len(handles), frameon=False,
                bbox_to_anchor=(0.5, 0.985), handlelength=1.2, columnspacing=1.6)
 
 
-def caveat_text(fig, caveat):
+def caveat_text(fig, caveat, marker='* '):
     """Footnote placed below the lowest x tick label of the figure."""
     if not caveat:
         return
@@ -234,46 +248,88 @@ def caveat_text(fig, caveat):
     r = fig.canvas.get_renderer()
     low = min(t.get_window_extent(r).y0 for ax in fig.axes for t in ax.get_xticklabels() if t.get_text())
     y = fig.transFigure.inverted().transform((0, low))[1]
-    fig.text(0.07, y - 0.02, '* ' + caveat, fontsize=7, color=INK2, style='italic', ha='left', va='top')
+    fig.text(0.07, y - 0.02, marker + caveat, fontsize=7, color=INK2, style='italic', ha='left', va='top')
 
 
-def plot_normalized(cores, data, base, kind, cap, row_groups, out, caveat):
-    norm = {b: {c: data[b][base][0] / data[b][c][0] for c in cores if c in data[b]}
+def normalize(cores, data, base):
+    return {b: {c: data[b][base][0] / data[b][c][0] for c in cores if c in data[b]}
             for b in data if base in data[b]}
-    groups = grouped(norm)
+
+
+def draw_norm_panel(ax, title, bs, norm, cores, plot_cores, base, kind, cap, top, first, rot=60):
+    """One category: grouped normalized-IPC bars per benchmark, then the category mean."""
+    n = len(plot_cores)
+    bw, mbw = 0.8 / n, MEAN_W * 0.8 / n
+    for j, b in enumerate(bs):
+        bars(ax, j, norm[b], cores, plot_cores, bw, cap)
+    m = {c: mean([norm[b][c] for b in bs if c in norm[b]], kind) for c in plot_cores}
+    xm = len(bs) - 0.5 + MEAN_GAP + MEAN_W / 2
+    bars(ax, xm, m, cores, plot_cores, mbw, cap)
+    for i, c in enumerate(plot_cores):   # value labels on the mean bars (not the baseline)
+        if c == base or not math.isfinite(m[c]) or (cap and m[c] > cap):
+            continue
+        ax.text(xm + (i - (n - 1) / 2) * mbw, m[c] + top * 0.02, f'{m[c]:.2f}', ha='center',
+                va='bottom', rotation=90, fontsize=6.5, color=INK, zorder=4)
+    ax.axhline(1, color=INK2, linewidth=0.9, zorder=3)
+    mean_label = 'Harmonic\nmean' if kind == 'harmonic' else 'Arithmetic\nmean'
+    setup_panel(ax, title, bs, mean_label, first, rot)
+    ax.set_ylim(0, top * (1.14 if cap else 1.0))
+    if first:
+        ax.set_ylabel(f'IPC normalized to\n{PRETTY.get(base, base)}')
+        ymax = cap or top
+        step = 0.5 if ymax <= 4 else 1.0
+        ax.set_yticks([t * step for t in range(int(ymax / step + 1e-9) + 1)])
+
+
+def norm_top(norm, cap):
+    return cap if cap else max(v for b in norm for v in norm[b].values()) * 1.08
+
+
+def legend_norm(fig, cores, plot_cores, base):
+    if base in plot_cores:
+        legend(fig, cores, plot_cores, f'{PRETTY.get(base, base)} (= 1)')
+    else:
+        legend(fig, cores, plot_cores, base_line_label=f'{PRETTY.get(base, base)} (= 1)')
+
+
+def plot_normalized(cores, plot_cores, norm, groups, base, kind, cap, row_groups, out, caveat):
+    """All categories in one figure."""
     rows = pack_rows(groups, MEAN_EXTRA, row_groups)
     fig, axes = make_axes(rows, MEAN_EXTRA, 2.15)
-    n = len(cores)
-    bw = 0.8 / n
-    means = {}
-    top = cap if cap else max(v for b in norm for v in norm[b].values()) * 1.08
-    mean_label = 'Harmonic\nmean' if kind == 'harmonic' else 'Arithmetic\nmean'
-    mbw = MEAN_W * 0.8 / n
+    top = norm_top(norm, cap)
     for row, row_axes in zip(rows, axes):
         for k, (ax, (name, bs)) in enumerate(zip(row_axes, row)):
-            for j, b in enumerate(bs):
-                bars(ax, j, norm[b], cores, cores, bw, cap)
-            m = {c: mean([norm[b][c] for b in bs if c in norm[b]], kind) for c in cores}
-            means[name] = m
-            xm = len(bs) - 0.5 + MEAN_GAP + MEAN_W / 2
-            bars(ax, xm, m, cores, cores, mbw, cap)
-            for i, c in enumerate(cores):   # value labels on the summary bars (not the baseline)
-                if c == base or not math.isfinite(m[c]) or (cap and m[c] > cap):
-                    continue
-                ax.text(xm + (i - (n - 1) / 2) * mbw, m[c] + top * 0.02, f'{m[c]:.2f}', ha='center',
-                        va='bottom', rotation=90, fontsize=6.5, color=INK, zorder=4)
-            ax.axhline(1, color=INK2, linewidth=0.9, zorder=3)
             title = name + ('*' if name == 'Memory' and caveat else '')
-            setup_panel(ax, title, bs, mean_label, k == 0)
-            ax.set_ylim(0, top * (1.14 if cap else 1.0))
-        row_axes[0].set_ylabel(f'IPC normalized to\n{PRETTY.get(base, base)}')
-        if cap:
-            step = 0.5 if cap <= 4 else 1.0
-            row_axes[0].set_yticks([t * step for t in range(int(cap / step + 1e-9) + 1)])
-    legend(fig, cores, cores, f'{PRETTY.get(base, base)} (= 1)')
+            draw_norm_panel(ax, title, bs, norm, cores, plot_cores, base, kind, cap, top, k == 0)
+    legend_norm(fig, cores, plot_cores, base)
     caveat_text(fig, caveat)
     save(fig, out / 'normalized_ipc')
-    return norm, groups, means
+
+
+def plot_normalized_split(cores, plot_cores, norm, groups, base, kind, cap, width, out, caveat,
+                          same_scale=False):
+    """One figure per category, no title (the caption names it). Each figure gets its own
+    y scale (rounded up to 0.5); bars are cut only where a value exceeds cap.
+    same_scale=True uses one scale for all figures instead."""
+    h = 2.5
+    for name, bs in groups:
+        if same_scale:
+            c_cap, top = cap, norm_top(norm, cap)
+        else:
+            vals = [norm[b][c] for b in bs for c in plot_cores if c in norm[b]]
+            vals += [mean([norm[b][c] for b in bs if c in norm[b]], kind) for c in plot_cores]
+            need = max(v for v in vals if math.isfinite(v)) * 1.08
+            if cap and need > cap:
+                c_cap, top = cap, cap
+            else:
+                c_cap, top = None, math.ceil(need / 0.5) * 0.5
+        fig = plt.figure(figsize=(width, h))
+        ax = fig.add_subplot(GridSpec(1, 1, figure=fig, top=0.97)[0, 0])
+        draw_norm_panel(ax, None, bs, norm, cores, plot_cores, base, kind, c_cap, top, True, rot=45)
+        legend_norm(fig, cores, plot_cores, base)
+        if name == 'Memory':
+            caveat_text(fig, caveat, marker='')
+        save(fig, out / ('normalized_ipc_' + name.lower().replace(' ', '_')))
 
 
 def plot_ipc(cores, data, row_groups, out, caveat):
@@ -343,6 +399,12 @@ def main():
                     help='cut normalized bars above this value (0 = no cut)')
     ap.add_argument('--row-groups', type=int, default=32,
                     help='max bar groups per figure row before categories wrap to a new row')
+    ap.add_argument('--width', type=float, default=7.0,
+                    help='width in inches of the per-category figures (3.4 = one column)')
+    ap.add_argument('--same-scale', action='store_true',
+                    help='one y scale for all per-category figures (default: each its own)')
+    ap.add_argument('--hide-baseline', action='store_true',
+                    help='no baseline bars; the baseline is the line at 1')
     ap.add_argument('--caveat-memory', default='',
                     help='note printed on the memory panel, e.g. "XiangShan: extra Chipyard L2"')
     a = ap.parse_args()
@@ -353,8 +415,13 @@ def main():
     if a.baseline not in cores:
         sys.exit(f'baseline {a.baseline!r} not in CSV; cores are {cores}')
 
-    norm, groups, _ = plot_normalized(cores, data, a.baseline, a.mean, a.ymax or None,
-                                      a.row_groups, out, a.caveat_memory)
+    norm = normalize(cores, data, a.baseline)
+    groups = grouped(norm)
+    plot_cores = [c for c in cores if not (a.hide_baseline and c == a.baseline)]
+    plot_normalized_split(cores, plot_cores, norm, groups, a.baseline, a.mean, a.ymax or None,
+                          a.width, out, a.caveat_memory, a.same_scale)
+    plot_normalized(cores, plot_cores, norm, groups, a.baseline, a.mean, a.ymax or None,
+                    a.row_groups, out, a.caveat_memory)
     plot_ipc(cores, data, a.row_groups, out, a.caveat_memory)
     write_summary(out / 'summary.txt', a.csv, cores, a.baseline, a.mean, norm, groups, problems, data)
     if problems:

@@ -1,4 +1,4 @@
-source: /cluster/home/gustavho/xiangshan-firesim-thesis/benchmarks/results/comparison.csv
+source: /Users/gustavho/gustavo/programming/master/thesis/benchmarks/results/comparison.csv
 baseline: Medium BOOM (= 1)
 plotted mean: harmonic
 
