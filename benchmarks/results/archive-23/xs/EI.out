@@ -1,0 +1,79 @@
+testing $random e23cbb39
+[XSPROBE] rst_vec=000080000000
+== Loading device model file '/work/chipyard/generators/testchipip/src/main/resources/dramsim2_ini/DDR3_micron_64M_8B_x4_sg15.ini' == 
+== Loading system model file '/work/chipyard/generators/testchipip/src/main/resources/dramsim2_ini/system.ini' == 
+===== MemorySystem 0 =====
+CH. 0 TOTAL_STORAGE : 4096MB | 1 Ranks | 16 Devices per rank
+DRAMSim2 Clock Frequency =666666666Hz, CPU Clock Frequency=500000000Hz
+Writing 8000000 with 0
+Done writing 8000000 with 0
+Writing 8000004 with 0
+Done writing 8000004 with 0
+Writing 8000040 with 0
+Done writing 8000040 with 0
+Writing 8000044 with 0
+Done writing 8000044 with 0
+[XSPROBE]                 2093 mem AR addr=80000000 len=  1 size=5 id=    1
+[XSPROBE]                 2096 mem AR addr=80000040 len=  1 size=5 id=    3
+[XSPROBE]                 2101 mem AR addr=80000080 len=  1 size=5 id=    5
+[XSPROBE]                 2106 mem AR addr=800000c0 len=  1 size=5 id=    7
+[XSPROBE]                 2111 mem AR addr=80000100 len=  1 size=5 id=    9
+[XSPROBE]                 2132 mem R id=    1 last=0 resp=0 data=1197003050733002a07362993002b07312aa4285305290730642829300000297
+[XSPROBE]                 2136 mem R id=    1 last=1 resp=0 data=f663fd23031300001317fda2829300001297fea10113000111177e2181930000
+[XSPROBE]                 2146 mem R id=    5 last=0 resp=0 data=07b7feb43023fea434231000ec2211010001a0010062b023430d080002b70062
+[XSPROBE]                 2150 mem R id=    5 last=1 resp=0 data=fe843783c3982701fe84370307c1100207b7c39893170713524f573707c11002
+[XSPROBE]                 2162 mem R id=    3 last=0 resp=0 data=0062b0234305080002b718a080e70000009745814505bfdd02a10002b0230062
+[XSPROBE]                 2166 mem R id=    3 last=1 resp=0 data=a023343023730062a023341023730062a0233420237322c1100202b70001a001
+[XSPROBE]                 2170 mem R id=    7 last=0 resp=0 data=fe043783c3982701fe04370307c1100207b7c398270107c1100207b70207d713
+[XSPROBE]                 2174 mem R id=    7 last=1 resp=0 data=80826105646200010007a02307c1100207b7c398270107c1100207b70207d713
+[XSPROBE]                 2178 mem R id=    9 last=0 resp=0 data=ee87879300001797fef43423639cef67879300001797fca43c231800f4227179
+[XSPROBE]                 2182 mem R id=    9 last=1 resp=0 data=1101808261457422853efe843783e398ed87879300001797973efd8437836398
+[XSPROBE]                 2308 mem AR addr=800001c0 len=  1 size=5 id=    1
+[XSPROBE]                 2311 mem AR addr=80000200 len=  1 size=5 id=    3
+[XSPROBE]                 2316 mem AR addr=80000240 len=  1 size=5 id=    5
+[XSPROBE]                 2321 mem AR addr=80000280 len=  1 size=5 id=    7
+[XSPROBE]                 2326 mem AR addr=800002c0 len=  1 size=5 id=    9
+[XSPROBE]                 2346 mem R id=    1 last=0 resp=0 data=ec26f022f406717980820ff00513808201c5053b01e5053b01f5053b01e5053b
+[XSPROBE]                 2350 mem R id=    1 last=1 resp=0 data=842af68080e7000000978d7d710787936789b0202973b00024f30ff0000fe84a
+[XSPROBE]                 2354 mem R id=    3 last=0 resp=0 data=7402c62270a2e7e080e700000097412585b38d05b02025f3b00025730ff0000f
+[XSPROBE]                 2358 mem R id=    3 last=1 resp=0 data=00000000000000000000000000000000000000000000808261454501694264e2
+[XSPROBE]                 2362 mem R id=    5 last=0 resp=0 data=0000000000000000000000000000000000000000000000000000000000000000
+[XSPROBE]                 2366 mem R id=    5 last=1 resp=0 data=0000000000000000000000000000000000000000000000000000000000000000
+[XSPROBE]                 2370 mem R id=    7 last=0 resp=0 data=0000000000000000000000000000000000000000000000000000000000000000
+[XSPROBE]                 2374 mem R id=    7 last=1 resp=0 data=0000000000000000000000000000000000000000000000000000000000000000
+[XSPROBE]                 2378 mem R id=    9 last=0 resp=0 data=0000000000000000000000000000000000000000000000000000000000000000
+[XSPROBE]                 2382 mem R id=    9 last=1 resp=0 data=0000000000000000000000000000000000000000000000000000000000000000
+[XSPROBE]                 2426 mem AR addr=80011000 len=  1 size=5 id=    1
+[XSPROBE]                 2428 mem AR addr=80010fc0 len=  1 size=5 id=    3
+[XSPROBE]                 2463 mem R id=    1 last=0 resp=0 data=0000000000000000000000000000000000000000000000000000000000000000
+[XSPROBE]                 2467 mem R id=    1 last=1 resp=0 data=0000000000000000000000000000000000000000000000000000000000000000
+[XSPROBE]                 2471 mem R id=    3 last=0 resp=0 data=0000000000000000000000000000000000000000000000000000000000000000
+[XSPROBE]                 2475 mem R id=    3 last=1 resp=0 data=0000000000000000000000000000000000000000000000000000000000000000
+[XSPROBE]                 2561 mem AR addr=80000140 len=  1 size=5 id=    1
+[XSPROBE]                 2564 mem AR addr=80000180 len=  1 size=5 id=    3
+[XSPROBE]                 2598 mem R id=    1 last=0 resp=0 data=6785a001e39800176713080007b700179713fec42783fef4262387aa1000ec22
+[XSPROBE]                 2602 mem R id=    1 last=1 resp=0 data=00ae0e3b00a3033b00a888bb62854885059003134e0d4ed54f094f9d06f55963
+[XSPROBE]                 2606 mem R id=    3 last=0 resp=0 data=01c5053b0067853b03c888bbfe5512e387c6250500af8fbb00af0f3b00ae8ebb
+[XSPROBE]                 2610 mem R id=    3 last=1 resp=0 data=01d5053b01c5053b0065053b0115053b01e5053b01f5053b01e5053b01d5053b
+[XSPROBE]                15086 periph AW addr=10020010 len=  0 size=2 id=0
+[XSPROBE]                15086 periph W last=1 strb=0f data=524f4931524f4931
+[XSPROBE]                15096 periph B id=0 resp=0
+[XSPROBE]                15138 periph AW addr=10020010 len=  0 size=2 id=0
+[XSPROBE]                15138 periph W last=1 strb=0f data=000030d7000030d7
+[XSPROBE]                15148 periph B id=0 resp=0
+[XSPROBE]                15191 periph AW addr=10020010 len=  0 size=2 id=0
+[XSPROBE]                15191 periph W last=1 strb=0f data=0000000000000000
+[XSPROBE]                15201 periph B id=0 resp=0
+[XSPROBE]                15243 periph AW addr=10020010 len=  0 size=2 id=0
+[XSPROBE]                15243 periph W last=1 strb=0f data=0000902200009022
+[XSPROBE]                15253 periph B id=0 resp=0
+[XSPROBE]                15295 periph AW addr=10020010 len=  0 size=2 id=0
+[XSPROBE]                15295 periph W last=1 strb=0f data=0000000000000000
+[XSPROBE]                15305 periph B id=0 resp=0
+[XSPROBE]                15347 periph AW addr=10020010 len=  0 size=2 id=0
+[XSPROBE]                15347 periph W last=1 strb=0f data=0000000000000000
+[XSPROBE]                15357 periph B id=0 resp=0
+[XSPROBE]                15404 periph AW addr=08000000 len=  0 size=3 id=0
+[XSPROBE]                15404 periph W last=1 strb=ff data=0000000000000001
+[XSPROBE]                15412 periph B id=0 resp=0
+*** PASSED *** Completed after                32126 simulation cycles
