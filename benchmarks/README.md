@@ -167,11 +167,18 @@ python3 rt/plot_results.py --caveat-memory "Memory benchmarks: XiangShan also ha
 cat results/plots/summary.txt
 ```
 
-This writes `results/plots/normalized_ipc.pdf` (IPC normalized to Medium BOOM = 1, bars
-from 0, order Medium BOOM, XiangShan, Mega BOOM, one harmonic mean per category),
-`ipc.pdf` (absolute IPC) and `summary.txt` (harmonic and arithmetic means per category,
-normalized IPC per benchmark). Options: `--mean arithmetic`, `--ymax 0` (no cut-off bars),
-`--order`, `--baseline`; see `python3 rt/plot_results.py --help`. If matplotlib can't be
+This writes, in `results/plots/`:
+- `normalized_ipc_control_flow.pdf`, `normalized_ipc_compute.pdf`,
+  `normalized_ipc_memory.pdf`: one figure per category, IPC normalized to Medium BOOM = 1,
+  bars from 0, order Medium BOOM, XiangShan, Mega BOOM, ending with the category's harmonic
+  mean. No title inside; the LaTeX caption names the category.
+- `normalized_ipc.pdf`: the same, all categories in one figure;
+- `ipc.pdf`: absolute IPC;
+- `summary.txt`: harmonic and arithmetic means per category, normalized IPC per benchmark.
+
+Options: `--hide-baseline` (Medium BOOM only as the line at 1), `--width 3.4` (single-column
+figures), `--same-scale`, `--mean arithmetic`, `--ymax 0` (no cut-off bars), `--order`,
+`--baseline`; see `python3 rt/plot_results.py --help`. If matplotlib can't be
 installed on IDUN, copy `results/comparison.csv` and `rt/plot_results.py` to another
 machine and run it there.
 
